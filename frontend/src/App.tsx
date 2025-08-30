@@ -1,0 +1,162 @@
+import React from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { Box } from '@mui/material';
+import { AuthProvider } from './contexts/AuthContext';
+import { AIAssistantProvider } from './contexts/AIAssistantContext';
+import Layout from './components/Layout/Layout';
+import LandingPage from './pages/LandingPage';
+import ProjectTypesShowcasePage from './pages/ProjectTypesShowcasePage';
+import HomePage from './pages/HomePage';
+import OnboardingPage from './pages/OnboardingPage';
+import ProjectCreationPage from './pages/ProjectCreationPage';
+import ProjectDashboardPage from './pages/ProjectDashboardPage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import ConfirmRegistrationPage from './pages/ConfirmRegistrationPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
+import BuilderDashboardPage from './pages/BuilderDashboardPage';
+import ProfilePage from './pages/ProfilePage';
+import SoWReviewPage from './pages/SoWReviewPage';
+import QuoteSubmissionPage from './pages/QuoteSubmissionPage';
+import QuoteDetailsPage from './pages/QuoteDetailsPage';
+import BuilderProfilePage from './pages/BuilderProfilePage';
+import ProtectedRoute from './components/Auth/ProtectedRoute';
+import AIAssistantChat from './components/AIAssistant/AIAssistantChat';
+
+// Initialize Amplify configuration
+import './config/amplify';
+
+function App() {
+  return (
+    <AuthProvider>
+      <AIAssistantProvider>
+        <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+          {/* Skip to main content link for accessibility */}
+          <a href="#main-content" className="skip-link">
+            Skip to main content
+          </a>
+          
+          <Routes>
+            {/* Public landing page */}
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/projects/types" element={<ProjectTypesShowcasePage />} />
+            
+            {/* Authentication routes (no layout) */}
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/confirm-registration" element={<ConfirmRegistrationPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            
+            {/* Application routes (with layout) */}
+            <Route path="/app" element={<Layout />}>
+              <Route index element={<HomePage />} />
+              <Route path="onboarding" element={<OnboardingPage />} />
+              <Route 
+                path="projects/create" 
+                element={
+                  <ProtectedRoute>
+                    <ProjectCreationPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="projects/:projectId" 
+                element={
+                  <ProtectedRoute>
+                    <ProjectDashboardPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="dashboard" 
+                element={
+                  <ProtectedRoute>
+                    <ProjectDashboardPage />
+                  </ProtectedRoute>
+                } 
+              />
+              
+              {/* Builder Routes */}
+              <Route 
+                path="builder/dashboard" 
+                element={
+                  <ProtectedRoute>
+                    <BuilderDashboardPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="builder/sow/:sowId" 
+                element={
+                  <ProtectedRoute>
+                    <SoWReviewPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="builder/quote/:sowId" 
+                element={
+                  <ProtectedRoute>
+                    <QuoteSubmissionPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="builder/quotes/:quoteId" 
+                element={
+                  <ProtectedRoute>
+                    <QuoteDetailsPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="builder/quotes/:quoteId/edit" 
+                element={
+                  <ProtectedRoute>
+                    <QuoteSubmissionPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="profile" 
+                element={
+                  <ProtectedRoute>
+                    <ProfilePage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="builder/profile" 
+                element={
+                  <ProtectedRoute>
+                    <BuilderProfilePage />
+                  </ProtectedRoute>
+                } 
+              />
+              
+              {/* Redirect unknown app routes to app home */}
+              <Route path="*" element={<Navigate to="/app" replace />} />
+            </Route>
+            
+            {/* Legacy routes - redirect to new structure */}
+            <Route path="/onboarding" element={<Navigate to="/app/onboarding" replace />} />
+            <Route path="/projects/*" element={<Navigate to="/app/projects/create" replace />} />
+            <Route path="/dashboard" element={<Navigate to="/app/dashboard" replace />} />
+            <Route path="/builder/*" element={<Navigate to="/app/builder/dashboard" replace />} />
+            <Route path="/profile" element={<Navigate to="/app/profile" replace />} />
+            
+            {/* Catch all - redirect to landing page */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+          
+          {/* AI Assistant Chat - Available on all pages */}
+          <AIAssistantChat />
+        </Box>
+      </AIAssistantProvider>
+    </AuthProvider>
+  );
+}
+
+export default App;
