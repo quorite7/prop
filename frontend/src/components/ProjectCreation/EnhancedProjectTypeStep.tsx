@@ -411,10 +411,22 @@ const EnhancedProjectTypeStep: React.FC<EnhancedProjectTypeStepProps> = ({
               variant="outlined"
               onClick={() => setCustomProjectDialog(true)}
               startIcon={<CategoryIcon />}
-              sx={{ height: '56px' }}
+              sx={{ 
+                height: '56px',
+                borderStyle: 'dashed',
+                borderColor: '#ff9800',
+                color: '#ff9800',
+                '&:hover': {
+                  borderColor: '#f57c00',
+                  backgroundColor: 'rgba(255, 152, 0, 0.04)'
+                }
+              }}
             >
-              Custom Project
+              Can't Find Your Project?
             </Button>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', mt: 0.5 }}>
+              Use this if none of the below match your needs
+            </Typography>
           </Grid>
         </Grid>
         
