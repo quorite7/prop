@@ -240,18 +240,56 @@ const LandingPage: React.FC = () => {
               >
                 <Paper
                   elevation={8}
+                  className="hero-card"
                   sx={{
-                    p: 4,
+                    p: 0,
                     borderRadius: 4,
                     bgcolor: 'rgba(255,255,255,0.95)',
                     color: 'text.primary',
                     maxWidth: 400,
                     width: '100%',
+                    overflow: 'hidden',
                   }}
                 >
-                  <Typography variant="h6" gutterBottom color="primary.main" fontWeight="bold">
-                    🏠 Project Dashboard Preview
-                  </Typography>
+                  <Box
+                    className="card-header"
+                    sx={{
+                      background: '#f8f9fa',
+                      padding: '1rem',
+                      borderBottom: '1px solid #e9ecef',
+                    }}
+                  >
+                    <Box
+                      className="card-dots"
+                      sx={{
+                        display: 'flex',
+                        gap: '0.5rem',
+                        '& span': {
+                          width: '12px',
+                          height: '12px',
+                          borderRadius: '50%',
+                          background: '#dee2e6',
+                        },
+                        '& span:first-of-type': {
+                          background: '#ff5f56',
+                        },
+                        '& span:nth-of-type(2)': {
+                          background: '#ffbd2e',
+                        },
+                        '& span:last-of-type': {
+                          background: '#27ca3f',
+                        },
+                      }}
+                    >
+                      <Box component="span" />
+                      <Box component="span" />
+                      <Box component="span" />
+                    </Box>
+                  </Box>
+                  <Box sx={{ p: 4 }}>
+                    <Typography variant="h6" gutterBottom color="primary.main" fontWeight="bold">
+                      🏠 Project Dashboard Preview
+                    </Typography>
                   <Box sx={{ mb: 2 }}>
                     <Typography variant="body2" color="text.secondary">
                       Current Project
@@ -282,6 +320,7 @@ const LandingPage: React.FC = () => {
                   >
                     View 3 Builder Quotes
                   </Button>
+                  </Box>
                 </Paper>
               </Box>
             </Grid>
