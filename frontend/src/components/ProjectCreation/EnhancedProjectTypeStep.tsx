@@ -820,10 +820,15 @@ const EnhancedProjectTypeStep: React.FC<EnhancedProjectTypeStepProps> = ({
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Describe Your Custom Project</DialogTitle>
+        <DialogTitle>
+          Describe Your Custom Project
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontWeight: 'normal' }}>
+            Use this only if none of our standard project types match your needs
+          </Typography>
+        </DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" paragraph>
-            Describe your unique project requirements. Our AI will analyze your description and suggest the most appropriate category and similar projects.
+            Describe your unique project requirements. Our AI will analyze your description and create a customized project plan for you.
           </Typography>
           <TextField
             fullWidth
