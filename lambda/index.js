@@ -375,10 +375,108 @@ exports.handler = async (event) => {
             }
         }
 
+        // AI Guidance endpoint (public - no auth required)
+        if ((path === '/ai/guidance' || path === '/prod/ai/guidance') && method === 'POST') {
+            console.log('AI Guidance request...');
+            
+            if (!event.body) {
+                return {
+                    statusCode: 400,
+                    headers,
+                    body: JSON.stringify({ error: 'Request body is required' })
+                };
+            }
+
+            try {
+                const { step, context } = JSON.parse(event.body);
+                console.log('AI Guidance for step:', step);
+
+                // Simple mock guidance based on step
+                let guidance = '';
+                switch (step) {
+                    case 'Property Address':
+                        guidance = 'Please enter your complete property address including postcode for accurate project planning.';
+                        break;
+                    case 'Project Type':
+                        guidance = 'Select the type of project that best matches your requirements. This helps us provide accurate estimates.';
+                        break;
+                    default:
+                        guidance = 'Please provide the required information to continue with your project.';
+                }
+
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify(guidance)
+                };
+            } catch (error) {
+                console.log('ERROR: AI Guidance failed:', error);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ 
+                        error: 'AI Guidance failed',
+                        details: error.message
+                    })
+                };
+            }
+        }
+
+        // Project Types endpoint (public - no auth required)
+        if ((path === '/projects/types' || path === '/prod/projects/types') && method === 'GET') {
+            console.log('Getting project types...');
+            
+            const projectTypes = [
+                {
+                    id: 'kitchen',
+                    name: 'Kitchen Renovation',
+                    description: 'Complete kitchen makeover including cabinets, appliances, and flooring',
+                    estimatedDuration: '4-6 weeks',
+                    estimatedCost: '£15,000 - £40,000',
+                    complexity: 'medium',
+                    requiresPlanning: false
+                },
+                {
+                    id: 'bathroom',
+                    name: 'Bathroom Renovation',
+                    description: 'Full bathroom renovation including plumbing and tiling',
+                    estimatedDuration: '2-4 weeks',
+                    estimatedCost: '£8,000 - £25,000',
+                    complexity: 'medium',
+                    requiresPlanning: false
+                },
+                {
+                    id: 'extension',
+                    name: 'Home Extension',
+                    description: 'Single or double storey extension to increase living space',
+                    estimatedDuration: '12-20 weeks',
+                    estimatedCost: '£30,000 - £80,000',
+                    complexity: 'high',
+                    requiresPlanning: true
+                },
+                {
+                    id: 'loft',
+                    name: 'Loft Conversion',
+                    description: 'Convert loft space into usable rooms',
+                    estimatedDuration: '6-8 weeks',
+                    estimatedCost: '£20,000 - £50,000',
+                    complexity: 'medium',
+                    requiresPlanning: false
+                }
+            ];
+
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify(projectTypes)
+            };
+        }
+
         // Protected endpoints (require authentication)
         const authHeader = event.headers.Authorization || event.headers.authorization;
         if (!authHeader) {
             console.log('ERROR: No authorization header for protected endpoint');
+            console.log('Available headers:', Object.keys(event.headers));
             return {
                 statusCode: 401,
                 headers,
@@ -390,6 +488,21 @@ exports.handler = async (event) => {
                 })
             };
         }
+
+        // Extract and validate JWT token
+        const token = authHeader.replace('Bearer ', '');
+        if (!token) {
+            console.log('ERROR: Invalid authorization header format');
+            return {
+                statusCode: 401,
+                headers,
+                body: JSON.stringify({ 
+                    error: 'Invalid authorization header format. Expected: Bearer <token>' 
+                })
+            };
+        }
+
+        console.log('Token received:', token.substring(0, 20) + '...');
 
         // Projects endpoint
         if ((path === '/projects' || path === '/prod/projects') && method === 'GET') {
@@ -432,6 +545,63 @@ exports.handler = async (event) => {
             };
         }
 
+        // Address validation endpoint
+        if ((path === '/projects/validate-address' || path === '/prod/projects/validate-address') && method === 'POST') {
+            console.log('Validating address...');
+            
+            if (!event.body) {
+                return {
+                    statusCode: 400,
+                    headers,
+                    body: JSON.stringify({ error: 'Request body is required' })
+                };
+            }
+
+            try {
+                const { address } = JSON.parse(event.body);
+                console.log('Address to validate:', address);
+
+                // Simple validation logic - in a real app you'd integrate with a proper address validation service
+                const isValidPostcode = address.postcode && /^[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}$/i.test(address.postcode);
+                const hasRequiredFields = address.line1 && address.city && address.postcode;
+
+                const result = {
+                    isValid: isValidPostcode && hasRequiredFields,
+                    suggestions: [],
+                    councilData: {
+                        localAuthority: 'Sample Council',
+                        conservationArea: false,
+                        listedBuilding: false
+                    }
+                };
+
+                // Add some mock suggestions if validation fails
+                if (!result.isValid && address.postcode) {
+                    result.suggestions = [
+                        {
+                            line1: address.line1 || '123 Sample Street',
+                            city: address.city || 'London',
+                            postcode: 'SW1A 1AA',
+                            country: 'UK'
+                        }
+                    ];
+                }
+
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify(result)
+                };
+            } catch (error) {
+                console.log('ERROR: Address validation failed:', error);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ error: 'Address validation failed' })
+                };
+            }
+        }
+
         console.log('ERROR: Route not found');
         return {
             statusCode: 404,
@@ -440,7 +610,7 @@ exports.handler = async (event) => {
                 error: 'Not found', 
                 path: path, 
                 method: method,
-                availablePaths: ['/health', '/auth/register', '/auth/login', '/auth/confirm', '/auth/resend-confirmation', '/projects']
+                availablePaths: ['/health', '/auth/register', '/auth/login', '/auth/confirm', '/auth/resend-confirmation', '/projects', '/projects/validate-address']
             })
         };
 

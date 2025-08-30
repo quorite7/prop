@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
 import {
   Box,
@@ -37,11 +37,18 @@ interface LoginFormData {
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { login, isAuthenticated, loading } = useAuth();
   const [error, setError] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
 
   const from = (location.state as any)?.from?.pathname || '/app/dashboard';
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (!loading && isAuthenticated) {
+      navigate('/app/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, loading, navigate]);
 
   const {
     register,

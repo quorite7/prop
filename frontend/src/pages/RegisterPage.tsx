@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import {
   Box,
@@ -82,9 +82,16 @@ interface RegisterFormData {
 
 const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
-  const { register: registerUser } = useAuth();
+  const { register: registerUser, isAuthenticated, loading } = useAuth();
   const [error, setError] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (!loading && isAuthenticated) {
+      navigate('/app/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, loading, navigate]);
 
   const {
     register,
