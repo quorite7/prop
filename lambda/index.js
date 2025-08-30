@@ -427,39 +427,248 @@ exports.handler = async (event) => {
             console.log('Getting project types...');
             
             const projectTypes = [
+                // Structural Extensions & Conversions
                 {
-                    id: 'kitchen',
-                    name: 'Kitchen Renovation',
-                    description: 'Complete kitchen makeover including cabinets, appliances, and flooring',
-                    estimatedDuration: '4-6 weeks',
-                    estimatedCost: '£15,000 - £40,000',
-                    complexity: 'medium',
-                    requiresPlanning: false
+                    id: 'loft-conversion',
+                    name: 'Loft Conversion',
+                    description: 'Transform your loft into a beautiful living space with dormer, hip-to-gable, mansard, or velux options',
+                    estimatedDuration: '6-12 weeks',
+                    estimatedCost: '£15,000 - £60,000',
+                    complexity: 'high',
+                    requiresPlanning: true
                 },
                 {
-                    id: 'bathroom',
-                    name: 'Bathroom Renovation',
-                    description: 'Full bathroom renovation including plumbing and tiling',
-                    estimatedDuration: '2-4 weeks',
+                    id: 'rear-extension',
+                    name: 'Rear Extension',
+                    description: 'Single-storey, double-storey, wrap-around, or glass box extensions to expand your living space',
+                    estimatedDuration: '8-16 weeks',
+                    estimatedCost: '£20,000 - £80,000',
+                    complexity: 'high',
+                    requiresPlanning: true
+                },
+                {
+                    id: 'side-extension',
+                    name: 'Side Extension',
+                    description: 'Single or double-storey side extensions and infill projects',
+                    estimatedDuration: '8-14 weeks',
+                    estimatedCost: '£25,000 - £70,000',
+                    complexity: 'high',
+                    requiresPlanning: true
+                },
+                {
+                    id: 'basement-conversion',
+                    name: 'Basement Conversion',
+                    description: 'Full basement or partial dig-out conversions for additional living space',
+                    estimatedDuration: '12-20 weeks',
+                    estimatedCost: '£30,000 - £100,000',
+                    complexity: 'high',
+                    requiresPlanning: true
+                },
+                {
+                    id: 'garage-conversion',
+                    name: 'Garage Conversion',
+                    description: 'Convert your garage to living space, home office, gym, or studio',
+                    estimatedDuration: '4-8 weeks',
                     estimatedCost: '£8,000 - £25,000',
                     complexity: 'medium',
                     requiresPlanning: false
                 },
                 {
-                    id: 'extension',
-                    name: 'Home Extension',
-                    description: 'Single or double storey extension to increase living space',
-                    estimatedDuration: '12-20 weeks',
-                    estimatedCost: '£30,000 - £80,000',
+                    id: 'conservatory',
+                    name: 'Conservatory & Orangery',
+                    description: 'Traditional, modern, lean-to conservatories and orangeries',
+                    estimatedDuration: '2-6 weeks',
+                    estimatedCost: '£10,000 - £40,000',
+                    complexity: 'medium',
+                    requiresPlanning: false
+                },
+
+                // Room-Specific Renovations
+                {
+                    id: 'kitchen-renovation',
+                    name: 'Kitchen Renovation',
+                    description: 'Complete kitchen refit with modern appliances, worktops, and storage solutions',
+                    estimatedDuration: '3-8 weeks',
+                    estimatedCost: '£8,000 - £50,000',
+                    complexity: 'medium',
+                    requiresPlanning: false
+                },
+                {
+                    id: 'bathroom-renovation',
+                    name: 'Bathroom Renovation',
+                    description: 'Full bathroom refit, en-suite, wet room, or family bathroom renovation',
+                    estimatedDuration: '2-6 weeks',
+                    estimatedCost: '£5,000 - £25,000',
+                    complexity: 'medium',
+                    requiresPlanning: false
+                },
+                {
+                    id: 'bedroom-renovation',
+                    name: 'Bedroom Renovation',
+                    description: 'Master bedroom, children\'s rooms, guest rooms, or nursery renovations',
+                    estimatedDuration: '2-4 weeks',
+                    estimatedCost: '£3,000 - £15,000',
+                    complexity: 'low',
+                    requiresPlanning: false
+                },
+                {
+                    id: 'living-room-renovation',
+                    name: 'Living Room Renovation',
+                    description: 'Open plan living, fireplace installation, built-in storage, or snug creation',
+                    estimatedDuration: '2-6 weeks',
+                    estimatedCost: '£4,000 - £20,000',
+                    complexity: 'medium',
+                    requiresPlanning: false
+                },
+                {
+                    id: 'home-office',
+                    name: 'Home Office Conversion',
+                    description: 'Study, library, or workspace conversion with proper lighting and storage',
+                    estimatedDuration: '2-4 weeks',
+                    estimatedCost: '£3,000 - £12,000',
+                    complexity: 'low',
+                    requiresPlanning: false
+                },
+
+                // External & Structural Work
+                {
+                    id: 'roofing',
+                    name: 'Roofing Work',
+                    description: 'Re-roofing, repairs, flat roof replacement, green roofs, slate, tile, or metal roofing',
+                    estimatedDuration: '1-4 weeks',
+                    estimatedCost: '£5,000 - £25,000',
+                    complexity: 'high',
+                    requiresPlanning: false
+                },
+                {
+                    id: 'windows-doors',
+                    name: 'Windows & Doors',
+                    description: 'UPVC, timber, aluminium, bi-fold doors, sliding doors, French doors, sash windows',
+                    estimatedDuration: '1-3 weeks',
+                    estimatedCost: '£3,000 - £15,000',
+                    complexity: 'medium',
+                    requiresPlanning: false
+                },
+                {
+                    id: 'driveway-patio',
+                    name: 'Driveway & Patio',
+                    description: 'Block paving, tarmac, gravel, resin, concrete, natural stone patios and driveways',
+                    estimatedDuration: '1-2 weeks',
+                    estimatedCost: '£2,000 - £12,000',
+                    complexity: 'medium',
+                    requiresPlanning: false
+                },
+
+                // Systems & Infrastructure
+                {
+                    id: 'central-heating',
+                    name: 'Central Heating System',
+                    description: 'Boiler replacement, radiator upgrades, underfloor heating, heat pumps',
+                    estimatedDuration: '1-3 weeks',
+                    estimatedCost: '£3,000 - £15,000',
+                    complexity: 'high',
+                    requiresPlanning: false
+                },
+                {
+                    id: 'electrical-rewiring',
+                    name: 'Electrical Rewiring',
+                    description: 'Full rewiring, consumer unit upgrades, EV charging points, smart home systems',
+                    estimatedDuration: '1-2 weeks',
+                    estimatedCost: '£2,500 - £8,000',
+                    complexity: 'high',
+                    requiresPlanning: false
+                },
+                {
+                    id: 'plumbing-upgrades',
+                    name: 'Plumbing Upgrades',
+                    description: 'New bathrooms, kitchen plumbing, water pressure improvements, mains upgrades',
+                    estimatedDuration: '1-3 weeks',
+                    estimatedCost: '£2,000 - £10,000',
+                    complexity: 'high',
+                    requiresPlanning: false
+                },
+                {
+                    id: 'insulation',
+                    name: 'Insulation Installation',
+                    description: 'Loft, cavity wall, external wall, floor, and acoustic insulation',
+                    estimatedDuration: '1-2 weeks',
+                    estimatedCost: '£1,500 - £8,000',
+                    complexity: 'medium',
+                    requiresPlanning: false
+                },
+                {
+                    id: 'solar-panels',
+                    name: 'Solar Panels & Renewables',
+                    description: 'Solar panels, battery storage, wind turbines, renewable energy systems',
+                    estimatedDuration: '1-2 weeks',
+                    estimatedCost: '£4,000 - £20,000',
+                    complexity: 'high',
+                    requiresPlanning: false
+                },
+
+                // Flooring & Interior Finishes
+                {
+                    id: 'hardwood-flooring',
+                    name: 'Hardwood Flooring',
+                    description: 'Solid, engineered, parquet, herringbone hardwood flooring installation',
+                    estimatedDuration: '1-2 weeks',
+                    estimatedCost: '£2,000 - £8,000',
+                    complexity: 'medium',
+                    requiresPlanning: false
+                },
+                {
+                    id: 'tiling',
+                    name: 'Tiling Work',
+                    description: 'Ceramic, porcelain, natural stone, mosaic tiling for floors and walls',
+                    estimatedDuration: '1-2 weeks',
+                    estimatedCost: '£1,500 - £6,000',
+                    complexity: 'medium',
+                    requiresPlanning: false
+                },
+                {
+                    id: 'painting-decorating',
+                    name: 'Painting & Decorating',
+                    description: 'Interior and exterior painting, wallpapering, decorative finishes',
+                    estimatedDuration: '1-3 weeks',
+                    estimatedCost: '£1,000 - £5,000',
+                    complexity: 'low',
+                    requiresPlanning: false
+                },
+
+                // Specialist Projects
+                {
+                    id: 'swimming-pool',
+                    name: 'Swimming Pool Installation',
+                    description: 'Indoor, outdoor, natural pools, hot tubs, and spa installations',
+                    estimatedDuration: '8-16 weeks',
+                    estimatedCost: '£25,000 - £100,000',
                     complexity: 'high',
                     requiresPlanning: true
                 },
                 {
-                    id: 'loft',
-                    name: 'Loft Conversion',
-                    description: 'Convert loft space into usable rooms',
-                    estimatedDuration: '6-8 weeks',
-                    estimatedCost: '£20,000 - £50,000',
+                    id: 'home-cinema',
+                    name: 'Home Cinema & Media Room',
+                    description: 'Soundproofing, projection systems, seating, and acoustic treatments',
+                    estimatedDuration: '2-6 weeks',
+                    estimatedCost: '£8,000 - £40,000',
+                    complexity: 'high',
+                    requiresPlanning: false
+                },
+                {
+                    id: 'wine-cellar',
+                    name: 'Wine Cellar',
+                    description: 'Temperature-controlled wine storage with racking and climate systems',
+                    estimatedDuration: '3-8 weeks',
+                    estimatedCost: '£10,000 - £50,000',
+                    complexity: 'high',
+                    requiresPlanning: false
+                },
+                {
+                    id: 'accessibility-modifications',
+                    name: 'Accessibility Modifications',
+                    description: 'Ramps, stairlifts, wet rooms, door widening for accessibility needs',
+                    estimatedDuration: '2-6 weeks',
+                    estimatedCost: '£3,000 - £20,000',
                     complexity: 'medium',
                     requiresPlanning: false
                 }

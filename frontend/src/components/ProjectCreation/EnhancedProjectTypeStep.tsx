@@ -35,7 +35,28 @@ import {
   Security as SecurityIcon,
   Category as CategoryIcon,
 } from '@mui/icons-material';
-import { projectTypesService, ProjectType, ProjectTypeCategory } from '../../services/projectTypesService';
+import { projectService } from '../../services/projectService';
+
+interface ProjectType {
+  id: string;
+  name: string;
+  description: string;
+  estimatedCost: string;
+  estimatedDuration: string;
+  complexity: 'low' | 'medium' | 'high';
+  requiresPlanning: boolean;
+  tags?: string[];
+  categoryKey?: string;
+  category?: string;
+}
+
+interface ProjectTypeCategory {
+  key: string;
+  name: string;
+  description: string;
+  icon: string;
+  projectCount: number;
+}
 
 interface EnhancedProjectTypeStepProps {
   selectedType?: string;
@@ -85,34 +106,48 @@ const EnhancedProjectTypeStep: React.FC<EnhancedProjectTypeStepProps> = ({
     filterProjects();
   }, [searchQuery, selectedCategory, allProjects]);
 
+  const handleProjectSelect = (project: ProjectType) => {
+    setSelectedProject(project);
+    handleSelection(project.id);
+  };
+
   const loadProjectTypes = async () => {
     try {
       setLoading(true);
       setError('');
       
-      const response = await projectTypesService.getAllProjectTypes();
-      setCategories(response.categories);
-      setFeaturedProjects(response.featuredProjects || []);
+      const projectTypes = await projectService.getProjectTypes();
+
+      // Convert to the expected format and organize by categories
+      const allProjects: ProjectType[] = projectTypes.map(pt => ({
+        ...pt,
+        tags: [],
+        categoryKey: getCategoryKey(pt.id),
+        category: getCategoryName(pt.id)
+      }));
       
-      // Flatten all projects from categories
-      const projects: ProjectType[] = [];
-      if (response.projectsByCategory) {
-        Object.entries(response.projectsByCategory).forEach(([categoryKey, categoryData]) => {
-          const categoryInfo = response.categories.find(c => c.key === categoryKey);
-          categoryData.projects.forEach(project => {
-            projects.push({
-              ...project,
-              categoryKey,
-              category: categoryInfo?.name,
-              categoryIcon: categoryInfo?.icon,
-              categoryDescription: categoryInfo?.description,
-            });
+      setAllProjects(allProjects);
+      setFilteredProjects(allProjects);
+      setFeaturedProjects(allProjects.slice(0, 8)); // Show more featured projects
+      
+      // Create category structure based on project types
+      const categoryMap = new Map();
+      allProjects.forEach(project => {
+        const key = project.categoryKey || 'general';
+        const name = project.category || 'General';
+        if (!categoryMap.has(key)) {
+          categoryMap.set(key, {
+            key,
+            name,
+            description: getCategoryDescription(key),
+            icon: getCategoryIcon(key),
+            projectCount: 0
           });
-        });
-      }
+        }
+        categoryMap.get(key).projectCount++;
+      });
       
-      setAllProjects(projects);
-      setFilteredProjects(projects);
+      setCategories(Array.from(categoryMap.values()));
     } catch (err: any) {
       setError(err.message || 'Failed to load project types');
     } finally {
@@ -134,7 +169,7 @@ const EnhancedProjectTypeStep: React.FC<EnhancedProjectTypeStepProps> = ({
       filtered = filtered.filter(project =>
         project.name.toLowerCase().includes(query) ||
         project.description.toLowerCase().includes(query) ||
-        project.tags.some(tag => tag.toLowerCase().includes(query)) ||
+        project.tags?.some(tag => tag.toLowerCase().includes(query)) ||
         (project.category && project.category.toLowerCase().includes(query))
       );
     }
@@ -142,9 +177,135 @@ const EnhancedProjectTypeStep: React.FC<EnhancedProjectTypeStepProps> = ({
     setFilteredProjects(filtered);
   };
 
-  const handleProjectSelect = (project: ProjectType) => {
-    setSelectedProject(project);
-    handleSelection(project.id);
+  const getCategoryKey = (projectId: string): string => {
+    const categoryMapping: Record<string, string> = {
+      'loft-conversion': 'extensions',
+      'rear-extension': 'extensions',
+      'side-extension': 'extensions',
+      'basement-conversion': 'extensions',
+      'garage-conversion': 'extensions',
+      'conservatory': 'extensions',
+      'kitchen-renovation': 'rooms',
+      'bathroom-renovation': 'rooms',
+      'bedroom-renovation': 'rooms',
+      'living-room-renovation': 'rooms',
+      'home-office': 'rooms',
+      'roofing': 'external',
+      'windows-doors': 'external',
+      'driveway-patio': 'external',
+      'central-heating': 'systems',
+      'electrical-rewiring': 'systems',
+      'plumbing-upgrades': 'systems',
+      'insulation': 'systems',
+      'solar-panels': 'systems',
+      'hardwood-flooring': 'finishes',
+      'tiling': 'finishes',
+      'painting-decorating': 'finishes',
+      'swimming-pool': 'specialist',
+      'home-cinema': 'specialist',
+      'wine-cellar': 'specialist',
+      'accessibility-modifications': 'specialist'
+    };
+    return categoryMapping[projectId] || 'general';
+  };
+  
+  const getCategoryName = (projectId: string): string => {
+    const key = getCategoryKey(projectId);
+    const nameMapping: Record<string, string> = {
+      'extensions': 'Extensions & Conversions',
+      'rooms': 'Room Renovations',
+      'external': 'External & Structural',
+      'systems': 'Systems & Infrastructure',
+      'finishes': 'Flooring & Finishes',
+      'specialist': 'Specialist Projects',
+      'general': 'General'
+    };
+    return nameMapping[key] || 'General';
+  };
+  
+  const getCategoryDescription = (key: string): string => {
+    const descriptions: Record<string, string> = {
+      'extensions': 'Expand your living space with extensions and conversions',
+      'rooms': 'Transform individual rooms with complete renovations',
+      'external': 'Improve your property\'s exterior and structural elements',
+      'systems': 'Upgrade essential home systems and infrastructure',
+      'finishes': 'Beautiful flooring and interior finishing touches',
+      'specialist': 'Unique and luxury home improvement projects',
+      'general': 'Various home improvement projects'
+    };
+    return descriptions[key] || 'Home improvement projects';
+  };
+  
+  const getCategoryIcon = (key: string): string => {
+    const icons: Record<string, string> = {
+      'extensions': '🏗️',
+      'rooms': '🏠',
+      'external': '🏘️',
+      'systems': '⚡',
+      'finishes': '🎨',
+      'specialist': '✨',
+      'general': '🔧'
+    };
+    return icons[key] || '🔧';
+  };
+
+  const getProjectIcon = (projectId: string): string => {
+    const icons: Record<string, string> = {
+      'loft-conversion': '🏠',
+      'rear-extension': '🏗️',
+      'side-extension': '🏗️',
+      'basement-conversion': '🏠',
+      'garage-conversion': '🚗',
+      'conservatory': '🌿',
+      'kitchen-renovation': '👨‍🍳',
+      'bathroom-renovation': '🛁',
+      'bedroom-renovation': '🛏️',
+      'living-room-renovation': '🛋️',
+      'home-office': '💻',
+      'roofing': '🏠',
+      'windows-doors': '🚪',
+      'driveway-patio': '🚗',
+      'central-heating': '🔥',
+      'electrical-rewiring': '⚡',
+      'plumbing-upgrades': '🚿',
+      'insulation': '🧱',
+      'solar-panels': '☀️',
+      'hardwood-flooring': '🪵',
+      'tiling': '🔲',
+      'painting-decorating': '🎨',
+      'swimming-pool': '🏊',
+      'home-cinema': '🎬',
+      'wine-cellar': '🍷',
+      'accessibility-modifications': '♿'
+    };
+    return icons[projectId] || '🔧';
+  };
+
+  const getProjectColor = (complexity: string): string => {
+    const colors: Record<string, string> = {
+      'low': '#4caf50',
+      'medium': '#ff9800',
+      'high': '#f44336'
+    };
+    return colors[complexity] || '#2196f3';
+  };
+
+  const getProjectColorSecondary = (complexity: string): string => {
+    const colors: Record<string, string> = {
+      'low': '#66bb6a',
+      'medium': '#ffb74d',
+      'high': '#ef5350'
+    };
+    return colors[complexity] || '#42a5f5';
+  };
+
+  const getComplexityColor = (complexity: string): string => {
+    const colors: Record<string, string> = {
+      'low': '#4caf50',
+      'medium': '#ff9800',
+      'high': '#f44336'
+    };
+    return colors[complexity] || '#2196f3';
   };
 
   const handleViewDetails = (project: ProjectType) => {
@@ -159,7 +320,7 @@ const EnhancedProjectTypeStep: React.FC<EnhancedProjectTypeStepProps> = ({
 
     try {
       setAnalyzingCustom(true);
-      const analysis = await projectTypesService.analyzeCustomProject(customDescription);
+      // const analysis = await projectTypesService.analyzeCustomProject(customDescription);
       
       // Create a custom project type based on analysis
       const customProject: ProjectType = {
@@ -168,13 +329,11 @@ const EnhancedProjectTypeStep: React.FC<EnhancedProjectTypeStepProps> = ({
         description: customDescription,
         estimatedCost: 'Varies',
         estimatedDuration: 'Varies',
-        complexity: 'varies',
-        requiresPlanning: 'depends',
-        requiresBuildingControl: 'depends',
+        complexity: 'medium',
+        requiresPlanning: true,
         tags: ['custom', 'bespoke'],
-        categoryKey: analysis.suggestedCategory.key,
-        category: analysis.suggestedCategory.name,
-        categoryIcon: analysis.suggestedCategory.icon,
+        categoryKey: 'custom',
+        category: 'Custom Project',
       };
 
       handleProjectSelect(customProject);
@@ -184,15 +343,6 @@ const EnhancedProjectTypeStep: React.FC<EnhancedProjectTypeStepProps> = ({
       setError(err.message || 'Failed to analyze custom project');
     } finally {
       setAnalyzingCustom(false);
-    }
-  };
-
-  const getComplexityColor = (complexity: string) => {
-    switch (complexity.toLowerCase()) {
-      case 'low': return '#4caf50';
-      case 'medium': return '#ff9800';
-      case 'high': return '#f44336';
-      default: return '#757575';
     }
   };
 
@@ -262,7 +412,7 @@ const EnhancedProjectTypeStep: React.FC<EnhancedProjectTypeStepProps> = ({
               scrollButtons="auto"
             >
               <Tab label="All" value="all" />
-              {categories.map((category) => (
+              {categories?.map((category) => (
                 <Tab
                   key={category.key}
                   label={`${category.icon} ${category.name.split(' ')[0]}`}
@@ -291,14 +441,22 @@ const EnhancedProjectTypeStep: React.FC<EnhancedProjectTypeStepProps> = ({
             🌟 Popular Projects
           </Typography>
           <Grid container spacing={2}>
-            {featuredProjects.map((project) => (
+            {featuredProjects?.map((project) => (
               <Grid item xs={12} sm={6} md={3} key={project.id}>
                 <Card
                   sx={{
                     cursor: 'pointer',
-                    border: currentSelected === project.id ? 2 : 1,
-                    borderColor: currentSelected === project.id ? 'primary.main' : 'divider',
-                    '&:hover': { boxShadow: 3 },
+                    height: '100%',
+                    transition: 'all 0.3s ease',
+                    border: currentSelected === project.id ? '3px solid #1976d2' : '1px solid #e0e0e0',
+                    boxShadow: currentSelected === project.id ? '0 8px 25px rgba(25, 118, 210, 0.3)' : '0 2px 8px rgba(0,0,0,0.1)',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow: '0 12px 30px rgba(0,0,0,0.15)',
+                      borderColor: '#1976d2'
+                    },
+                    borderRadius: 3,
+                    overflow: 'hidden'
                   }}
                   onClick={() => handleProjectSelect(project)}
                 >
@@ -306,22 +464,64 @@ const EnhancedProjectTypeStep: React.FC<EnhancedProjectTypeStepProps> = ({
                     component="div"
                     sx={{
                       height: 120,
-                      background: 'linear-gradient(45deg, #f5f5f5, #e0e0e0)',
+                      background: `linear-gradient(135deg, ${getProjectColor(project.complexity)} 0%, ${getProjectColorSecondary(project.complexity)} 100%)`,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: '2rem',
+                      fontSize: '3rem',
+                      color: 'white',
+                      position: 'relative'
                     }}
                   >
-                    {project.categoryIcon}
+                    {getProjectIcon(project.id)}
+                    {project.requiresPlanning && (
+                      <Chip
+                        label="Planning Required"
+                        size="small"
+                        sx={{
+                          position: 'absolute',
+                          top: 8,
+                          right: 8,
+                          backgroundColor: 'rgba(255,255,255,0.9)',
+                          color: '#d32f2f',
+                          fontWeight: 'bold',
+                          fontSize: '0.7rem'
+                        }}
+                      />
+                    )}
                   </CardMedia>
-                  <CardContent sx={{ p: 2 }}>
-                    <Typography variant="subtitle2" noWrap>
+                  <CardContent sx={{ p: 2, height: 'calc(100% - 120px)', display: 'flex', flexDirection: 'column' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1, color: '#1976d2', fontSize: '1rem' }}>
                       {project.name}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-                      {project.estimatedCost}
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2, flexGrow: 1, lineHeight: 1.4, fontSize: '0.85rem' }}>
+                      {project.description}
                     </Typography>
+                    <Box sx={{ mt: 'auto' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <ScheduleIcon sx={{ fontSize: 14, color: '#666' }} />
+                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                          {project.estimatedDuration}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <MoneyIcon sx={{ fontSize: 14, color: '#666' }} />
+                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>
+                          {project.estimatedCost}
+                        </Typography>
+                      </Box>
+                      <Chip
+                        label={`${project.complexity.charAt(0).toUpperCase() + project.complexity.slice(1)} Complexity`}
+                        size="small"
+                        sx={{
+                          backgroundColor: getComplexityColor(project.complexity),
+                          color: 'white',
+                          fontWeight: 'bold',
+                          fontSize: '0.7rem',
+                          height: 20
+                        }}
+                      />
+                    </Box>
                   </CardContent>
                 </Card>
               </Grid>
@@ -345,16 +545,22 @@ const EnhancedProjectTypeStep: React.FC<EnhancedProjectTypeStepProps> = ({
           </Alert>
         ) : (
           <Grid container spacing={3}>
-            {filteredProjects.map((project) => (
+            {filteredProjects?.map((project) => (
               <Grid item xs={12} sm={6} md={4} key={project.id}>
                 <Card
                   sx={{
                     height: '100%',
                     cursor: 'pointer',
-                    border: currentSelected === project.id ? 2 : 1,
-                    borderColor: currentSelected === project.id ? 'primary.main' : 'divider',
-                    '&:hover': { boxShadow: 4 },
-                    transition: 'all 0.2s',
+                    transition: 'all 0.3s ease',
+                    border: currentSelected === project.id ? '3px solid #1976d2' : '1px solid #e0e0e0',
+                    boxShadow: currentSelected === project.id ? '0 8px 25px rgba(25, 118, 210, 0.3)' : '0 2px 8px rgba(0,0,0,0.1)',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow: '0 12px 30px rgba(0,0,0,0.15)',
+                      borderColor: '#1976d2'
+                    },
+                    borderRadius: 3,
+                    overflow: 'hidden'
                   }}
                   onClick={() => handleProjectSelect(project)}
                 >
@@ -362,18 +568,43 @@ const EnhancedProjectTypeStep: React.FC<EnhancedProjectTypeStepProps> = ({
                     component="div"
                     sx={{
                       height: 140,
-                      background: 'linear-gradient(45deg, #f5f5f5, #e0e0e0)',
+                      background: `linear-gradient(135deg, ${getProjectColor(project.complexity)} 0%, ${getProjectColorSecondary(project.complexity)} 100%)`,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       fontSize: '3rem',
+                      color: 'white',
                       position: 'relative',
                     }}
                   >
-                    {project.categoryIcon}
+                    {getProjectIcon(project.id)}
+                    {project.requiresPlanning && (
+                      <Chip
+                        label="Planning Required"
+                        size="small"
+                        sx={{
+                          position: 'absolute',
+                          top: 8,
+                          left: 8,
+                          backgroundColor: 'rgba(255,255,255,0.9)',
+                          color: '#d32f2f',
+                          fontWeight: 'bold',
+                          fontSize: '0.7rem'
+                        }}
+                      />
+                    )}
                     <IconButton
                       size="small"
-                      sx={{ position: 'absolute', top: 8, right: 8 }}
+                      sx={{ 
+                        position: 'absolute', 
+                        top: 8, 
+                        right: 8,
+                        backgroundColor: 'rgba(255,255,255,0.2)',
+                        color: 'white',
+                        '&:hover': {
+                          backgroundColor: 'rgba(255,255,255,0.3)'
+                        }
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleViewDetails(project);
@@ -382,8 +613,8 @@ const EnhancedProjectTypeStep: React.FC<EnhancedProjectTypeStepProps> = ({
                       <InfoIcon fontSize="small" />
                     </IconButton>
                   </CardMedia>
-                  <CardContent sx={{ flexGrow: 1, p: 2 }}>
-                    <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: '1rem' }}>
+                  <CardContent sx={{ flexGrow: 1, p: 2, display: 'flex', flexDirection: 'column' }}>
+                    <Typography variant="h6" component="h3" gutterBottom sx={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1976d2' }}>
                       {project.name}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: '0.85rem' }}>
@@ -445,7 +676,7 @@ const EnhancedProjectTypeStep: React.FC<EnhancedProjectTypeStepProps> = ({
         fullWidth
       >
         <DialogTitle>
-          {selectedProject?.categoryIcon} {selectedProject?.name}
+          {selectedProject?.category} - {selectedProject?.name}
         </DialogTitle>
         <DialogContent>
           {selectedProject && (
@@ -479,24 +710,13 @@ const EnhancedProjectTypeStep: React.FC<EnhancedProjectTypeStepProps> = ({
                       <Typography variant="body2">{getPlanningText(selectedProject.requiresPlanning)}</Typography>
                     </Box>
                   </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                    <SecurityIcon color="primary" />
-                    <Box>
-                      <Typography variant="subtitle2">Building Control</Typography>
-                      <Typography variant="body2">
-                        {typeof selectedProject.requiresBuildingControl === 'boolean' 
-                          ? (selectedProject.requiresBuildingControl ? 'Required' : 'Not required')
-                          : 'Check requirements'}
-                      </Typography>
-                    </Box>
-                  </Box>
                 </Grid>
               </Grid>
 
               <Box sx={{ mt: 3 }}>
                 <Typography variant="subtitle2" gutterBottom>Tags</Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                  {selectedProject.tags.map((tag) => (
+                  {selectedProject.tags?.map((tag) => (
                     <Chip key={tag} label={tag} size="small" variant="outlined" />
                   ))}
                 </Box>

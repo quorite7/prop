@@ -58,7 +58,7 @@ const AddressStep: React.FC<AddressStepProps> = ({
   useEffect(() => {
     // Validate address when postcode is complete
     if (currentData.postcode.length >= 6) {
-      validateAddress();
+      // validateAddress();
     }
   }, [currentData.postcode]);
 

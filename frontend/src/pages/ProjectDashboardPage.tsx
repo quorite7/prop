@@ -184,8 +184,8 @@ const ProjectDashboardPage: React.FC = () => {
                       {formatAddress(proj.propertyAddress)}
                     </Typography>
                     <Chip 
-                      label={proj.status.replace('_', ' ').toUpperCase()} 
-                      color={getStatusColor(proj.status) as any}
+                      label={(proj.status || 'draft').replace('_', ' ').toUpperCase()} 
+                      color={getStatusColor(proj.status || 'draft') as any}
                       size="small"
                     />
                   </CardContent>
