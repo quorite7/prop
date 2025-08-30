@@ -1,6 +1,6 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, ScanCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
-const { CognitoIdentityProviderClient, AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminInitiateAuthCommand } = require('@aws-sdk/client-cognito-identity-provider');
+const { CognitoIdentityProviderClient, AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminInitiateAuthCommand, AdminConfirmSignUpCommand, SignUpCommand, ConfirmSignUpCommand, ResendConfirmationCodeCommand } = require('@aws-sdk/client-cognito-identity-provider');
 
 const dynamoClient = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(dynamoClient);
@@ -95,31 +95,19 @@ exports.handler = async (event) => {
             }
 
             try {
-                console.log('Creating Cognito user...');
-                const createUserCommand = new AdminCreateUserCommand({
-                    UserPoolId: process.env.USER_POOL_ID,
+                console.log('Creating Cognito user with SignUp...');
+                const signUpCommand = new SignUpCommand({
+                    ClientId: process.env.USER_POOL_CLIENT_ID,
                     Username: email,
-                    TemporaryPassword: password,
-                    MessageAction: 'SUPPRESS',
+                    Password: password,
                     UserAttributes: [
-                        { Name: 'email', Value: email },
-                        { Name: 'email_verified', Value: 'true' }
+                        { Name: 'email', Value: email }
                     ]
                 });
 
-                await cognito.send(createUserCommand);
-                console.log('User created successfully');
-                
-                console.log('Setting permanent password...');
-                const setPasswordCommand = new AdminSetUserPasswordCommand({
-                    UserPoolId: process.env.USER_POOL_ID,
-                    Username: email,
-                    Password: password,
-                    Permanent: true
-                });
-
-                await cognito.send(setPasswordCommand);
-                console.log('Password set successfully');
+                const signUpResult = await cognito.send(signUpCommand);
+                console.log('User created successfully, verification email sent');
+                console.log('SignUp result:', JSON.stringify(signUpResult, null, 2));
 
                 return {
                     statusCode: 201,
@@ -136,7 +124,7 @@ exports.handler = async (event) => {
                                     phone: '',
                                     companyName: ''
                                 },
-                                emailVerified: true
+                                emailVerified: false
                             }
                         }
                     })
@@ -246,6 +234,147 @@ exports.handler = async (event) => {
             }
         }
 
+        // Email confirmation endpoint
+        if ((path === '/auth/confirm' || path === '/prod/auth/confirm') && method === 'POST') {
+            console.log('=== CONFIRM EMAIL ENDPOINT ===');
+            
+            if (!event.body) {
+                console.log('ERROR: No request body');
+                return {
+                    statusCode: 400,
+                    headers,
+                    body: JSON.stringify({ error: 'Request body is required' })
+                };
+            }
+
+            let requestData;
+            try {
+                requestData = JSON.parse(event.body);
+                console.log('Parsed confirmation data:', JSON.stringify(requestData, null, 2));
+            } catch (parseError) {
+                console.log('ERROR: Failed to parse JSON:', parseError.message);
+                return {
+                    statusCode: 400,
+                    headers,
+                    body: JSON.stringify({ error: 'Invalid JSON in request body' })
+                };
+            }
+
+            const { email, confirmationCode } = requestData;
+            console.log('Email confirmation attempt for:', email);
+
+            if (!email || !confirmationCode) {
+                console.log('ERROR: Missing email or confirmation code');
+                return {
+                    statusCode: 400,
+                    headers,
+                    body: JSON.stringify({ error: 'Email and confirmation code are required' })
+                };
+            }
+
+            try {
+                console.log('Confirming user email...');
+                const confirmCommand = new ConfirmSignUpCommand({
+                    ClientId: process.env.USER_POOL_CLIENT_ID,
+                    Username: email,
+                    ConfirmationCode: confirmationCode
+                });
+
+                await cognito.send(confirmCommand);
+                console.log('Email confirmed successfully');
+
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify({ 
+                        success: true,
+                        message: 'Email confirmed successfully'
+                    })
+                };
+            } catch (confirmError) {
+                console.log('ERROR: Email confirmation failed:', confirmError);
+                return {
+                    statusCode: 400,
+                    headers,
+                    body: JSON.stringify({ 
+                        error: 'Email confirmation failed',
+                        details: confirmError.message,
+                        code: confirmError.name
+                    })
+                };
+            }
+        }
+
+        // Resend confirmation code endpoint
+        if ((path === '/auth/resend-confirmation' || path === '/prod/auth/resend-confirmation') && method === 'POST') {
+            console.log('=== RESEND CONFIRMATION ENDPOINT ===');
+            
+            if (!event.body) {
+                console.log('ERROR: No request body');
+                return {
+                    statusCode: 400,
+                    headers,
+                    body: JSON.stringify({ error: 'Request body is required' })
+                };
+            }
+
+            let requestData;
+            try {
+                requestData = JSON.parse(event.body);
+                console.log('Parsed resend data:', JSON.stringify(requestData, null, 2));
+            } catch (parseError) {
+                console.log('ERROR: Failed to parse JSON:', parseError.message);
+                return {
+                    statusCode: 400,
+                    headers,
+                    body: JSON.stringify({ error: 'Invalid JSON in request body' })
+                };
+            }
+
+            const { email } = requestData;
+            console.log('Resend confirmation for:', email);
+
+            if (!email) {
+                console.log('ERROR: Missing email');
+                return {
+                    statusCode: 400,
+                    headers,
+                    body: JSON.stringify({ error: 'Email is required' })
+                };
+            }
+
+            try {
+                console.log('Resending confirmation code...');
+                const resendCommand = new ResendConfirmationCodeCommand({
+                    ClientId: process.env.USER_POOL_CLIENT_ID,
+                    Username: email
+                });
+
+                await cognito.send(resendCommand);
+                console.log('Confirmation code resent successfully');
+
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify({ 
+                        success: true,
+                        message: 'Confirmation code sent successfully'
+                    })
+                };
+            } catch (resendError) {
+                console.log('ERROR: Resend confirmation failed:', resendError);
+                return {
+                    statusCode: 400,
+                    headers,
+                    body: JSON.stringify({ 
+                        error: 'Failed to resend confirmation code',
+                        details: resendError.message,
+                        code: resendError.name
+                    })
+                };
+            }
+        }
+
         // Protected endpoints (require authentication)
         const authHeader = event.headers.Authorization || event.headers.authorization;
         if (!authHeader) {
@@ -311,7 +440,7 @@ exports.handler = async (event) => {
                 error: 'Not found', 
                 path: path, 
                 method: method,
-                availablePaths: ['/health', '/auth/register', '/auth/login', '/projects']
+                availablePaths: ['/health', '/auth/register', '/auth/login', '/auth/confirm', '/auth/resend-confirmation', '/projects']
             })
         };
 
