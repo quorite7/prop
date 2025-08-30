@@ -22,6 +22,7 @@ import {
   // AccordionSummary,
   // AccordionDetails,
   IconButton,
+  Container,
   // Tooltip,
 } from '@mui/material';
 import {
@@ -388,8 +389,8 @@ const EnhancedProjectTypeStep: React.FC<EnhancedProjectTypeStepProps> = ({
 
       {/* Search and Filter Controls */}
       <Box sx={{ mb: 4 }}>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={6}>
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={8}>
             <TextField
               fullWidth
               placeholder="Search project types..."
@@ -405,33 +406,37 @@ const EnhancedProjectTypeStep: React.FC<EnhancedProjectTypeStepProps> = ({
             />
           </Grid>
           <Grid item xs={12} md={4}>
-            <Tabs
-              value={selectedCategory}
-              onChange={(_, value) => setSelectedCategory(value)}
-              variant="scrollable"
-              scrollButtons="auto"
-            >
-              <Tab label="All" value="all" />
-              {categories?.map((category) => (
-                <Tab
-                  key={category.key}
-                  label={`${category.icon} ${category.name.split(' ')[0]}`}
-                  value={category.key}
-                />
-              ))}
-            </Tabs>
-          </Grid>
-          <Grid item xs={12} md={2}>
             <Button
               fullWidth
               variant="outlined"
               onClick={() => setCustomProjectDialog(true)}
               startIcon={<CategoryIcon />}
+              sx={{ height: '56px' }}
             >
               Custom Project
             </Button>
           </Grid>
         </Grid>
+        
+        {/* Category Tabs */}
+        <Box sx={{ mt: 3 }}>
+          <Tabs
+            value={selectedCategory}
+            onChange={(_, value) => setSelectedCategory(value)}
+            variant="scrollable"
+            scrollButtons="auto"
+            sx={{ borderBottom: 1, borderColor: 'divider' }}
+          >
+            <Tab label="All Projects" value="all" />
+            {categories?.map((category) => (
+              <Tab
+                key={category.key}
+                label={`${category.icon} ${category.name}`}
+                value={category.key}
+              />
+            ))}
+          </Tabs>
+        </Box>
       </Box>
 
       {/* Featured Projects (when no search/filter) */}
@@ -739,6 +744,62 @@ const EnhancedProjectTypeStep: React.FC<EnhancedProjectTypeStepProps> = ({
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Sticky Action Bar */}
+      <Box
+        sx={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: 'white',
+          borderTop: '1px solid #e0e0e0',
+          boxShadow: '0 -2px 10px rgba(0,0,0,0.1)',
+          p: 2,
+          zIndex: 1000
+        }}
+      >
+        <Container maxWidth="lg">
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box>
+              {currentSelected && (
+                <Typography variant="body2" color="text.secondary">
+                  Selected: <strong>{allProjects.find(p => p.id === currentSelected)?.name}</strong>
+                </Typography>
+              )}
+            </Box>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              {currentSelected && (
+                <Button
+                  variant="contained"
+                  onClick={() => {
+                    const project = allProjects.find(p => p.id === currentSelected);
+                    if (project) {
+                      handleProjectSelect(project);
+                      if (onNext) onNext();
+                    }
+                  }}
+                  sx={{ minWidth: 200 }}
+                >
+                  Continue with Selected Project
+                </Button>
+              )}
+              {!currentSelected && (
+                <Button
+                  variant="outlined"
+                  disabled
+                  sx={{ minWidth: 200 }}
+                >
+                  Select a Project Type
+                </Button>
+              )}
+            </Box>
+          </Box>
+        </Container>
+      </Box>
+
+      {/* Add bottom padding to prevent content from being hidden behind sticky bar */}
+      <Box sx={{ height: 80 }} />
 
       {/* Custom Project Dialog */}
       <Dialog
