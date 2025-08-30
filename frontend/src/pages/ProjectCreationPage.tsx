@@ -132,7 +132,7 @@ const ProjectCreationPage: React.FC = () => {
         }
       }
 
-      navigate(`/projects/${project.id}`);
+      navigate('/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Failed to create project. Please try again.');
     } finally {
@@ -227,7 +227,7 @@ const ProjectCreationPage: React.FC = () => {
           orientation={isMobile ? 'vertical' : 'horizontal'}
         >
           {steps.map((label, index) => (
-            <Step key={label} completed={index < activeStep || isStepValid(index)}>
+            <Step key={label} completed={index < activeStep}>
               <StepLabel>{label}</StepLabel>
             </Step>
           ))}
