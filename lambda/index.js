@@ -1,10 +1,16 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, ScanCommand, PutCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, ScanCommand, PutCommand, QueryCommand, GetCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 const { CognitoIdentityProviderClient, AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminInitiateAuthCommand, AdminConfirmSignUpCommand, SignUpCommand, ConfirmSignUpCommand, ResendConfirmationCodeCommand, ForgotPasswordCommand, ConfirmForgotPasswordCommand } = require('@aws-sdk/client-cognito-identity-provider');
+const { v4: uuidv4 } = require('uuid');
 
 const dynamoClient = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(dynamoClient);
 const cognito = new CognitoIdentityProviderClient({});
+
+// Environment variables
+const PROJECTS_TABLE = process.env.PROJECTS_TABLE;
+const BUILDER_ACCESS_TABLE = process.env.BUILDER_ACCESS_TABLE;
+const AUDIT_LOG_TABLE = process.env.AUDIT_LOG_TABLE;
 
 // JWT validation and user extraction utilities
 function extractUserFromToken(authHeader) {
@@ -41,6 +47,71 @@ function requireAuth(event) {
         throw new Error('Authorization header required');
     }
     return extractUserFromToken(authHeader);
+}
+
+// Audit logging
+async function logAccess(userId, action, resource, success, details = {}) {
+    try {
+        await dynamodb.send(new PutCommand({
+            TableName: AUDIT_LOG_TABLE,
+            Item: {
+                id: uuidv4(),
+                timestamp: new Date().toISOString(),
+                userId,
+                action,
+                resource,
+                success,
+                details,
+                ip: details.ip || 'unknown'
+            }
+        }));
+    } catch (error) {
+        console.error('Audit log error:', error);
+    }
+}
+
+// Builder access control
+async function hasBuilderAccess(builderId, projectId) {
+    try {
+        const result = await dynamodb.send(new GetCommand({
+            TableName: BUILDER_ACCESS_TABLE,
+            Key: { projectId, builderId }
+        }));
+        return !!result.Item && result.Item.status === 'active';
+    } catch (error) {
+        console.error('Builder access check error:', error);
+        return false;
+    }
+}
+
+async function getBuilderProjects(builderId) {
+    try {
+        const result = await dynamodb.send(new QueryCommand({
+            TableName: BUILDER_ACCESS_TABLE,
+            IndexName: 'BuilderIdIndex',
+            KeyConditionExpression: 'builderId = :builderId',
+            FilterExpression: '#status = :status',
+            ExpressionAttributeNames: { '#status': 'status' },
+            ExpressionAttributeValues: { ':builderId': builderId, ':status': 'active' }
+        }));
+        return result.Items || [];
+    } catch (error) {
+        console.error('Get builder projects error:', error);
+        return [];
+    }
+}
+
+async function isProjectOwner(userId, projectId) {
+    try {
+        const result = await dynamodb.send(new GetCommand({
+            TableName: PROJECTS_TABLE,
+            Key: { id: projectId }
+        }));
+        return result.Item && result.Item.userId === userId;
+    } catch (error) {
+        console.error('Project ownership check error:', error);
+        return false;
+    }
 }
 
 exports.handler = async (event) => {
@@ -874,37 +945,35 @@ exports.handler = async (event) => {
                 const user = requireAuth(event);
                 console.log('Authenticated user:', user.userId, user.userType);
                 
-                // Query projects by userId (homeowners see only their projects)
+                await logAccess(user.userId, 'GET_PROJECTS', 'projects', true, { 
+                    userType: user.userType,
+                    ip: event.requestContext?.identity?.sourceIp 
+                });
+                
                 if (user.userType === 'homeowner') {
+                    // Homeowners see only their projects
                     try {
-                        // Try using GSI first
                         const command = new QueryCommand({
-                            TableName: process.env.PROJECTS_TABLE,
+                            TableName: PROJECTS_TABLE,
                             IndexName: 'UserIdIndex',
                             KeyConditionExpression: 'userId = :userId',
-                            ExpressionAttributeValues: {
-                                ':userId': user.userId
-                            }
+                            ExpressionAttributeValues: { ':userId': user.userId }
                         });
                         
                         const result = await dynamodb.send(command);
-                        console.log('Projects retrieved for homeowner via GSI:', result.Items.length);
+                        console.log('Projects retrieved for homeowner:', result.Items.length);
                         
                         return {
                             statusCode: 200,
                             headers,
-                            body: JSON.stringify(result.Items)
+                            body: JSON.stringify({ success: true, data: result.Items })
                         };
                     } catch (gsiError) {
-                        console.log('GSI not ready, falling back to scan with filter:', gsiError.message);
-                        
-                        // Fallback to scan with filter if GSI is not ready
+                        // Fallback to scan
                         const scanCommand = new ScanCommand({
-                            TableName: process.env.PROJECTS_TABLE,
+                            TableName: PROJECTS_TABLE,
                             FilterExpression: 'userId = :userId',
-                            ExpressionAttributeValues: {
-                                ':userId': user.userId
-                            }
+                            ExpressionAttributeValues: { ':userId': user.userId }
                         });
                         
                         const scanResult = await dynamodb.send(scanCommand);
@@ -913,31 +982,60 @@ exports.handler = async (event) => {
                         return {
                             statusCode: 200,
                             headers,
-                            body: JSON.stringify(scanResult.Items)
+                            body: JSON.stringify({ success: true, data: scanResult.Items })
                         };
                     }
                 } else if (user.userType === 'builder') {
                     // Builders see only projects they've been invited to
-                    // For now, return empty array until invitation system is implemented
-                    console.log('Builder access - returning empty array until invitation system implemented');
+                    const accessList = await getBuilderProjects(user.userId);
+                    const projectIds = accessList.map(access => access.projectId);
+                    
+                    if (projectIds.length === 0) {
+                        return {
+                            statusCode: 200,
+                            headers,
+                            body: JSON.stringify({ success: true, data: [] })
+                        };
+                    }
+                    
+                    // Get project details for accessible projects
+                    const projects = [];
+                    for (const projectId of projectIds) {
+                        try {
+                            const result = await dynamodb.send(new GetCommand({
+                                TableName: PROJECTS_TABLE,
+                                Key: { id: projectId }
+                            }));
+                            if (result.Item) {
+                                projects.push(result.Item);
+                            }
+                        } catch (error) {
+                            console.error(`Error fetching project ${projectId}:`, error);
+                        }
+                    }
+                    
                     return {
                         statusCode: 200,
                         headers,
-                        body: JSON.stringify([])
+                        body: JSON.stringify({ success: true, data: projects })
                     };
                 } else {
+                    await logAccess(user.userId, 'GET_PROJECTS', 'projects', false, { 
+                        error: 'Invalid user type',
+                        userType: user.userType 
+                    });
                     return {
                         statusCode: 403,
                         headers,
-                        body: JSON.stringify({ error: 'Invalid user type' })
+                        body: JSON.stringify({ error: 'Access denied' })
                     };
                 }
-            } catch (error) {
-                console.error('Authentication or database error:', error.message);
+            } catch (authError) {
+                console.error('Authentication error:', authError);
                 return {
                     statusCode: 401,
                     headers,
-                    body: JSON.stringify({ error: 'Unauthorized: ' + error.message })
+                    body: JSON.stringify({ error: 'Authentication required: ' + authError.message })
                 };
             }
         }
@@ -1048,6 +1146,198 @@ exports.handler = async (event) => {
             }
         }
 
+        // Builder invitation endpoints
+        if ((path === '/projects/invite-builder' || path === '/prod/projects/invite-builder') && method === 'POST') {
+            try {
+                const user = requireAuth(event);
+                const { projectId, builderEmail } = JSON.parse(event.body);
+                
+                // Only homeowners can invite builders
+                if (user.userType !== 'homeowner') {
+                    await logAccess(user.userId, 'INVITE_BUILDER', projectId, false, { error: 'Not homeowner' });
+                    return {
+                        statusCode: 403,
+                        headers,
+                        body: JSON.stringify({ error: 'Only homeowners can invite builders' })
+                    };
+                }
+                
+                // Verify project ownership
+                if (!(await isProjectOwner(user.userId, projectId))) {
+                    await logAccess(user.userId, 'INVITE_BUILDER', projectId, false, { error: 'Not project owner' });
+                    return {
+                        statusCode: 403,
+                        headers,
+                        body: JSON.stringify({ error: 'You can only invite builders to your own projects' })
+                    };
+                }
+                
+                // Create builder access record
+                await dynamodb.send(new PutCommand({
+                    TableName: BUILDER_ACCESS_TABLE,
+                    Item: {
+                        projectId,
+                        builderId: builderEmail, // Using email as builderId for now
+                        status: 'active',
+                        invitedBy: user.userId,
+                        invitedAt: new Date().toISOString(),
+                        permissions: ['view', 'quote']
+                    }
+                }));
+                
+                await logAccess(user.userId, 'INVITE_BUILDER', projectId, true, { builderEmail });
+                
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify({ success: true, message: 'Builder invited successfully' })
+                };
+            } catch (error) {
+                console.error('Invite builder error:', error);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ error: 'Failed to invite builder' })
+                };
+            }
+        }
+
+        // Remove builder access
+        if ((path === '/projects/remove-builder' || path === '/prod/projects/remove-builder') && method === 'POST') {
+            try {
+                const user = requireAuth(event);
+                const { projectId, builderId } = JSON.parse(event.body);
+                
+                if (user.userType !== 'homeowner' || !(await isProjectOwner(user.userId, projectId))) {
+                    await logAccess(user.userId, 'REMOVE_BUILDER', projectId, false, { error: 'Access denied' });
+                    return {
+                        statusCode: 403,
+                        headers,
+                        body: JSON.stringify({ error: 'Access denied' })
+                    };
+                }
+                
+                await dynamodb.send(new DeleteCommand({
+                    TableName: BUILDER_ACCESS_TABLE,
+                    Key: { projectId, builderId }
+                }));
+                
+                await logAccess(user.userId, 'REMOVE_BUILDER', projectId, true, { builderId });
+                
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify({ success: true, message: 'Builder access removed' })
+                };
+            } catch (error) {
+                console.error('Remove builder error:', error);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ error: 'Failed to remove builder access' })
+                };
+            }
+        }
+
+        // Get project access list (for homeowners)
+        if ((path === '/projects/access' || path === '/prod/projects/access') && method === 'GET') {
+            try {
+                const user = requireAuth(event);
+                const projectId = event.queryStringParameters?.projectId;
+                
+                if (!projectId) {
+                    return {
+                        statusCode: 400,
+                        headers,
+                        body: JSON.stringify({ error: 'Project ID required' })
+                    };
+                }
+                
+                if (user.userType !== 'homeowner' || !(await isProjectOwner(user.userId, projectId))) {
+                    await logAccess(user.userId, 'GET_PROJECT_ACCESS', projectId, false, { error: 'Access denied' });
+                    return {
+                        statusCode: 403,
+                        headers,
+                        body: JSON.stringify({ error: 'Access denied' })
+                    };
+                }
+                
+                const result = await dynamodb.send(new QueryCommand({
+                    TableName: BUILDER_ACCESS_TABLE,
+                    KeyConditionExpression: 'projectId = :projectId',
+                    ExpressionAttributeValues: { ':projectId': projectId }
+                }));
+                
+                await logAccess(user.userId, 'GET_PROJECT_ACCESS', projectId, true);
+                
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify({ success: true, data: result.Items })
+                };
+            } catch (error) {
+                console.error('Get project access error:', error);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ error: 'Failed to get project access' })
+                };
+            }
+        }
+
+        // Get individual project (with access control)
+        if (path.match(/^\/(?:prod\/)?projects\/[^\/]+$/) && method === 'GET') {
+            try {
+                const user = requireAuth(event);
+                const projectId = path.split('/').pop();
+                
+                let hasAccess = false;
+                
+                if (user.userType === 'homeowner') {
+                    hasAccess = await isProjectOwner(user.userId, projectId);
+                } else if (user.userType === 'builder') {
+                    hasAccess = await hasBuilderAccess(user.userId, projectId);
+                }
+                
+                if (!hasAccess) {
+                    await logAccess(user.userId, 'GET_PROJECT', projectId, false, { error: 'Access denied' });
+                    return {
+                        statusCode: 403,
+                        headers,
+                        body: JSON.stringify({ error: 'Access denied' })
+                    };
+                }
+                
+                const result = await dynamodb.send(new GetCommand({
+                    TableName: PROJECTS_TABLE,
+                    Key: { id: projectId }
+                }));
+                
+                if (!result.Item) {
+                    return {
+                        statusCode: 404,
+                        headers,
+                        body: JSON.stringify({ error: 'Project not found' })
+                    };
+                }
+                
+                await logAccess(user.userId, 'GET_PROJECT', projectId, true);
+                
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify({ success: true, data: result.Item })
+                };
+            } catch (error) {
+                console.error('Get project error:', error);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ error: 'Failed to get project' })
+                };
+            }
+        }
+
         console.log('ERROR: Route not found');
         return {
             statusCode: 404,
@@ -1056,7 +1346,7 @@ exports.handler = async (event) => {
                 error: 'Not found', 
                 path: path, 
                 method: method,
-                availablePaths: ['/health', '/auth/register', '/auth/login', '/auth/confirm', '/auth/resend-confirmation', '/auth/forgot-password', '/auth/reset-password', '/projects', '/projects/validate-address']
+                availablePaths: ['/health', '/auth/register', '/auth/login', '/auth/confirm', '/auth/resend-confirmation', '/auth/forgot-password', '/auth/reset-password', '/projects', '/projects/validate-address', '/projects/invite-builder', '/projects/remove-builder', '/projects/access']
             })
         };
 

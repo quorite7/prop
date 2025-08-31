@@ -137,7 +137,7 @@ const ProjectDashboardPage: React.FC = () => {
         <Alert severity="error">
           {error}
         </Alert>
-        <Button onClick={() => navigate('/dashboard')} sx={{ mt: 2 }}>
+        <Button onClick={() => navigate('/app/dashboard')} sx={{ mt: 2 }}>
           Back to Dashboard
         </Button>
       </Container>
@@ -163,7 +163,7 @@ const ProjectDashboardPage: React.FC = () => {
             <Button 
               variant="contained" 
               size="large"
-              onClick={() => navigate('/projects/create')}
+              onClick={() => navigate('/app/projects/create')}
             >
               Create Your First Project
             </Button>
@@ -192,7 +192,7 @@ const ProjectDashboardPage: React.FC = () => {
                   <CardActions>
                     <Button 
                       size="small" 
-                      onClick={() => navigate(`/projects/${proj.id}`)}
+                      onClick={() => navigate(`/app/projects/${proj.id}`)}
                     >
                       View Details
                     </Button>
@@ -207,7 +207,7 @@ const ProjectDashboardPage: React.FC = () => {
           <Box sx={{ mt: 4, textAlign: 'center' }}>
             <Button 
               variant="contained" 
-              onClick={() => navigate('/projects/create')}
+              onClick={() => navigate('/app/projects/create')}
             >
               Create New Project
             </Button>
@@ -224,7 +224,7 @@ const ProjectDashboardPage: React.FC = () => {
         <Alert severity="error">
           Project not found
         </Alert>
-        <Button onClick={() => navigate('/dashboard')} sx={{ mt: 2 }}>
+        <Button onClick={() => navigate('/app/dashboard')} sx={{ mt: 2 }}>
           Back to Dashboard
         </Button>
       </Container>
@@ -241,15 +241,15 @@ const ProjectDashboardPage: React.FC = () => {
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
           <Box>
             <Typography variant="h3" component="h1" gutterBottom>
-              {formatProjectType(project.projectType)} Project
+              {formatProjectType(project.projectType || 'unknown')} Project
             </Typography>
             <Typography variant="h6" color="text.secondary">
-              {formatAddress(project.propertyAddress)}
+              {formatAddress(project.propertyAddress || {})}
             </Typography>
           </Box>
           <Chip 
-            label={project.status.replace('_', ' ').toUpperCase()} 
-            color={getStatusColor(project.status) as any}
+            label={(project.status || 'draft').replace('_', ' ').toUpperCase()} 
+            color={getStatusColor(project.status || 'draft') as any}
             size="medium"
           />
         </Box>
@@ -346,7 +346,7 @@ const ProjectDashboardPage: React.FC = () => {
                   </ListItemIcon>
                   <ListItemText
                     primary="View Documents"
-                    secondary={`${project.documents.length} files uploaded`}
+                    secondary={`${(project.documents || []).length} files uploaded`}
                   />
                 </ListItem>
               </List>
@@ -370,34 +370,34 @@ const ProjectDashboardPage: React.FC = () => {
                 <ListItem>
                   <ListItemText
                     primary="Project Type"
-                    secondary={formatProjectType(project.projectType)}
+                    secondary={formatProjectType(project.projectType || 'unknown')}
                   />
                 </ListItem>
                 <ListItem>
                   <ListItemText
                     primary="Created"
-                    secondary={new Date(project.createdAt).toLocaleDateString()}
+                    secondary={new Date(project.createdAt || Date.now()).toLocaleDateString()}
                   />
                 </ListItem>
                 <ListItem>
                   <ListItemText
                     primary="Last Updated"
-                    secondary={new Date(project.updatedAt).toLocaleDateString()}
+                    secondary={new Date(project.updatedAt || Date.now()).toLocaleDateString()}
                   />
                 </ListItem>
-                {project.requirements.timeline && (
+                {project.requirements?.timeline && (
                   <ListItem>
                     <ListItemText
                       primary="Timeline"
-                      secondary={project.requirements.timeline}
+                      secondary={project.requirements?.timeline}
                     />
                   </ListItem>
                 )}
-                {project.requirements.budget && (
+                {project.requirements?.budget && (
                   <ListItem>
                     <ListItemText
                       primary="Budget Range"
-                      secondary={`£${project.requirements.budget.min?.toLocaleString()} - £${project.requirements.budget.max?.toLocaleString()}`}
+                      secondary={`£${project.requirements?.budget.min?.toLocaleString()} - £${project.requirements?.budget.max?.toLocaleString()}`}
                     />
                   </ListItem>
                 )}
@@ -418,41 +418,41 @@ const ProjectDashboardPage: React.FC = () => {
                   <ListItem>
                     <ListItemText
                       primary="Local Authority"
-                      secondary={project.councilData.localAuthority}
+                      secondary={project.councilData?.localAuthority}
                     />
                   </ListItem>
                   <ListItem>
                     <ListItemIcon>
-                      {project.councilData.conservationArea ? 
+                      {project.councilData?.conservationArea ? 
                         <WarningIcon color="warning" /> : 
                         <CheckIcon color="success" />
                       }
                     </ListItemIcon>
                     <ListItemText
                       primary="Conservation Area"
-                      secondary={project.councilData.conservationArea ? 'Yes - Additional restrictions apply' : 'No'}
+                      secondary={project.councilData?.conservationArea ? 'Yes - Additional restrictions apply' : 'No'}
                     />
                   </ListItem>
                   <ListItem>
                     <ListItemIcon>
-                      {project.councilData.listedBuilding ? 
+                      {project.councilData?.listedBuilding ? 
                         <WarningIcon color="warning" /> : 
                         <CheckIcon color="success" />
                       }
                     </ListItemIcon>
                     <ListItemText
                       primary="Listed Building"
-                      secondary={project.councilData.listedBuilding ? 'Yes - Special permissions required' : 'No'}
+                      secondary={project.councilData?.listedBuilding ? 'Yes - Special permissions required' : 'No'}
                     />
                   </ListItem>
                 </List>
-                {project.councilData.planningRestrictions.length > 0 && (
+                {(project.councilData?.planningRestrictions || []).length > 0 && (
                   <>
                     <Divider sx={{ my: 1 }} />
                     <Typography variant="body2" color="text.secondary" gutterBottom>
                       Planning Restrictions:
                     </Typography>
-                    {project.councilData.planningRestrictions.map((restriction, index) => (
+                    {(project.councilData?.planningRestrictions || []).map((restriction, index) => (
                       <Typography key={index} variant="body2" sx={{ ml: 2 }}>
                         • {restriction}
                       </Typography>
@@ -472,29 +472,29 @@ const ProjectDashboardPage: React.FC = () => {
                 Project Requirements
               </Typography>
               <Typography variant="body1" paragraph>
-                {project.requirements.description}
+                {project.requirements?.description}
               </Typography>
               
-              {project.requirements.materials && project.requirements.materials.length > 0 && (
+              {project.requirements?.materials && project.requirements?.materials.length > 0 && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
                     Material Preferences:
                   </Typography>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                    {project.requirements.materials.map((material, index) => (
+                    {project.requirements?.materials.map((material, index) => (
                       <Chip key={index} label={material} variant="outlined" size="small" />
                     ))}
                   </Box>
                 </Box>
               )}
 
-              {project.requirements.specialRequirements && project.requirements.specialRequirements.length > 0 && (
+              {project.requirements?.specialRequirements && project.requirements?.specialRequirements.length > 0 && (
                 <Box>
                   <Typography variant="body2" color="text.secondary" gutterBottom>
                     Special Requirements:
                   </Typography>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                    {project.requirements.specialRequirements.map((requirement, index) => (
+                    {project.requirements?.specialRequirements.map((requirement, index) => (
                       <Chip key={index} label={requirement} color="secondary" variant="outlined" size="small" />
                     ))}
                   </Box>

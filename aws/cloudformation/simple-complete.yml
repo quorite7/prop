@@ -10,7 +10,7 @@ Parameters:
     Description: S3 key for Lambda code zip file
 
 Resources:
-  # DynamoDB Table
+  # DynamoDB Tables
   ProjectsTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -33,6 +33,46 @@ Resources:
             ProjectionType: ALL
           BillingMode: PAY_PER_REQUEST
 
+  BuilderProjectAccessTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: uk-home-builder-access
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: projectId
+          AttributeType: S
+        - AttributeName: builderId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: projectId
+          KeyType: HASH
+        - AttributeName: builderId
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: BuilderIdIndex
+          KeySchema:
+            - AttributeName: builderId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          BillingMode: PAY_PER_REQUEST
+
+  AuditLogTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: uk-home-audit-logs
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+
   # Lambda Execution Role
   LambdaRole:
     Type: AWS::IAM::Role
@@ -54,7 +94,12 @@ Resources:
               - Effect: Allow
                 Action:
                   - dynamodb:*
-                Resource: !GetAtt ProjectsTable.Arn
+                Resource: 
+                  - !GetAtt ProjectsTable.Arn
+                  - !Sub '${ProjectsTable.Arn}/index/*'
+                  - !GetAtt BuilderProjectAccessTable.Arn
+                  - !Sub '${BuilderProjectAccessTable.Arn}/index/*'
+                  - !GetAtt AuditLogTable.Arn
 
   # Lambda Function
   ApiFunction:
@@ -70,6 +115,10 @@ Resources:
       Environment:
         Variables:
           PROJECTS_TABLE: !Ref ProjectsTable
+          BUILDER_ACCESS_TABLE: !Ref BuilderProjectAccessTable
+          AUDIT_LOG_TABLE: !Ref AuditLogTable
+          USER_POOL_ID: eu-west-2_LY6wiylnT
+          USER_POOL_CLIENT_ID: 40t1l2d5m70t3cg0b39dvglkjs
       Timeout: 30
 
   # API Gateway

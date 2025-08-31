@@ -132,7 +132,7 @@ const ProjectCreationPage: React.FC = () => {
         }
       }
 
-      navigate('/dashboard');
+      navigate(`/app/projects/${project.id}`);
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Failed to create project. Please try again.');
     } finally {
