@@ -1,10 +1,47 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, ScanCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
-const { CognitoIdentityProviderClient, AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminInitiateAuthCommand, AdminConfirmSignUpCommand, SignUpCommand, ConfirmSignUpCommand, ResendConfirmationCodeCommand } = require('@aws-sdk/client-cognito-identity-provider');
+const { DynamoDBDocumentClient, ScanCommand, PutCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const { CognitoIdentityProviderClient, AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminInitiateAuthCommand, AdminConfirmSignUpCommand, SignUpCommand, ConfirmSignUpCommand, ResendConfirmationCodeCommand, ForgotPasswordCommand, ConfirmForgotPasswordCommand } = require('@aws-sdk/client-cognito-identity-provider');
 
 const dynamoClient = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(dynamoClient);
 const cognito = new CognitoIdentityProviderClient({});
+
+// JWT validation and user extraction utilities
+function extractUserFromToken(authHeader) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        throw new Error('Missing or invalid Authorization header');
+    }
+    
+    const token = authHeader.substring(7);
+    try {
+        // Basic JWT decode (for development - in production should use proper JWT verification)
+        const parts = token.split('.');
+        if (parts.length !== 3) {
+            throw new Error('Invalid JWT format');
+        }
+        
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+        console.log('JWT payload:', JSON.stringify(payload, null, 2));
+        
+        return {
+            userId: payload.sub,
+            email: payload.email,
+            userType: payload['custom:user_type'] || payload['custom:userType'] || 'homeowner',
+            username: payload['cognito:username'] || payload.username
+        };
+    } catch (error) {
+        console.error('JWT decode error:', error);
+        throw new Error('Invalid JWT token: ' + error.message);
+    }
+}
+
+function requireAuth(event) {
+    const authHeader = event.headers.Authorization || event.headers.authorization;
+    if (!authHeader) {
+        throw new Error('Authorization header required');
+    }
+    return extractUserFromToken(authHeader);
+}
 
 exports.handler = async (event) => {
     const headers = {
@@ -101,7 +138,8 @@ exports.handler = async (event) => {
                     Username: email,
                     Password: password,
                     UserAttributes: [
-                        { Name: 'email', Value: email }
+                        { Name: 'email', Value: email },
+                        { Name: 'custom:user_type', Value: userType || 'homeowner' }
                     ]
                 });
 
@@ -370,6 +408,121 @@ exports.handler = async (event) => {
                         error: 'Failed to resend confirmation code',
                         details: resendError.message,
                         code: resendError.name
+                    })
+                };
+            }
+        }
+
+        // Forgot password endpoint
+        if ((path === '/auth/forgot-password' || path === '/prod/auth/forgot-password') && method === 'POST') {
+            console.log('=== FORGOT PASSWORD ENDPOINT ===');
+            
+            if (!event.body) {
+                return {
+                    statusCode: 400,
+                    headers,
+                    body: JSON.stringify({ error: 'Request body is required' })
+                };
+            }
+
+            const { email } = JSON.parse(event.body);
+            console.log('Password reset request for email:', email);
+
+            if (!email) {
+                return {
+                    statusCode: 400,
+                    headers,
+                    body: JSON.stringify({ error: 'Email is required' })
+                };
+            }
+
+            try {
+                console.log('Initiating password reset...');
+                const forgotPasswordCommand = new ForgotPasswordCommand({
+                    ClientId: process.env.USER_POOL_CLIENT_ID,
+                    Username: email
+                });
+
+                await cognito.send(forgotPasswordCommand);
+                console.log('Password reset code sent successfully');
+
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify({ 
+                        success: true,
+                        message: 'Password reset code sent to your email'
+                    })
+                };
+            } catch (forgotError) {
+                console.log('ERROR: Forgot password failed:', forgotError);
+                return {
+                    statusCode: 400,
+                    headers,
+                    body: JSON.stringify({ 
+                        error: 'Failed to send password reset code',
+                        details: forgotError.message,
+                        code: forgotError.name
+                    })
+                };
+            }
+        }
+
+        // Reset password endpoint
+        if ((path === '/auth/reset-password' || path === '/prod/auth/reset-password') && method === 'POST') {
+            console.log('=== RESET PASSWORD ENDPOINT ===');
+            
+            if (!event.body) {
+                return {
+                    statusCode: 400,
+                    headers,
+                    body: JSON.stringify({ error: 'Request body is required' })
+                };
+            }
+
+            const { email, code, confirmationCode, newPassword } = JSON.parse(event.body);
+            console.log('Password reset confirmation for email:', email);
+
+            // Accept both 'code' and 'confirmationCode' for compatibility
+            const resetCode = code || confirmationCode;
+
+            if (!email || !resetCode || !newPassword) {
+                return {
+                    statusCode: 400,
+                    headers,
+                    body: JSON.stringify({ error: 'Email, confirmation code, and new password are required' })
+                };
+            }
+
+            try {
+                console.log('Confirming password reset...');
+                const confirmForgotPasswordCommand = new ConfirmForgotPasswordCommand({
+                    ClientId: process.env.USER_POOL_CLIENT_ID,
+                    Username: email,
+                    ConfirmationCode: resetCode,
+                    Password: newPassword
+                });
+
+                await cognito.send(confirmForgotPasswordCommand);
+                console.log('Password reset completed successfully');
+
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify({ 
+                        success: true,
+                        message: 'Password reset successfully'
+                    })
+                };
+            } catch (resetError) {
+                console.log('ERROR: Password reset failed:', resetError);
+                return {
+                    statusCode: 400,
+                    headers,
+                    body: JSON.stringify({ 
+                        error: 'Failed to reset password',
+                        details: resetError.message,
+                        code: resetError.name
                     })
                 };
             }
@@ -713,45 +866,129 @@ exports.handler = async (event) => {
 
         console.log('Token received:', token.substring(0, 20) + '...');
 
-        // Projects endpoint
+        // Projects endpoint - GET (requires authentication)
         if ((path === '/projects' || path === '/prod/projects') && method === 'GET') {
             console.log('Getting projects...');
-            const command = new ScanCommand({
-                TableName: process.env.PROJECTS_TABLE
-            });
             
-            const result = await dynamodb.send(command);
-            console.log('Projects retrieved:', result.Items.length);
-            
-            return {
-                statusCode: 200,
-                headers,
-                body: JSON.stringify(result.Items)
-            };
+            try {
+                const user = requireAuth(event);
+                console.log('Authenticated user:', user.userId, user.userType);
+                
+                // Query projects by userId (homeowners see only their projects)
+                if (user.userType === 'homeowner') {
+                    try {
+                        // Try using GSI first
+                        const command = new QueryCommand({
+                            TableName: process.env.PROJECTS_TABLE,
+                            IndexName: 'UserIdIndex',
+                            KeyConditionExpression: 'userId = :userId',
+                            ExpressionAttributeValues: {
+                                ':userId': user.userId
+                            }
+                        });
+                        
+                        const result = await dynamodb.send(command);
+                        console.log('Projects retrieved for homeowner via GSI:', result.Items.length);
+                        
+                        return {
+                            statusCode: 200,
+                            headers,
+                            body: JSON.stringify(result.Items)
+                        };
+                    } catch (gsiError) {
+                        console.log('GSI not ready, falling back to scan with filter:', gsiError.message);
+                        
+                        // Fallback to scan with filter if GSI is not ready
+                        const scanCommand = new ScanCommand({
+                            TableName: process.env.PROJECTS_TABLE,
+                            FilterExpression: 'userId = :userId',
+                            ExpressionAttributeValues: {
+                                ':userId': user.userId
+                            }
+                        });
+                        
+                        const scanResult = await dynamodb.send(scanCommand);
+                        console.log('Projects retrieved for homeowner via scan:', scanResult.Items.length);
+                        
+                        return {
+                            statusCode: 200,
+                            headers,
+                            body: JSON.stringify(scanResult.Items)
+                        };
+                    }
+                } else if (user.userType === 'builder') {
+                    // Builders see only projects they've been invited to
+                    // For now, return empty array until invitation system is implemented
+                    console.log('Builder access - returning empty array until invitation system implemented');
+                    return {
+                        statusCode: 200,
+                        headers,
+                        body: JSON.stringify([])
+                    };
+                } else {
+                    return {
+                        statusCode: 403,
+                        headers,
+                        body: JSON.stringify({ error: 'Invalid user type' })
+                    };
+                }
+            } catch (error) {
+                console.error('Authentication or database error:', error.message);
+                return {
+                    statusCode: 401,
+                    headers,
+                    body: JSON.stringify({ error: 'Unauthorized: ' + error.message })
+                };
+            }
         }
 
+        // Projects endpoint - POST (requires authentication)
         if ((path === '/projects' || path === '/prod/projects') && method === 'POST') {
             console.log('Creating project...');
-            const data = JSON.parse(event.body);
-            const item = {
-                id: Date.now().toString(),
-                ...data,
-                createdAt: new Date().toISOString()
-            };
+            
+            try {
+                const user = requireAuth(event);
+                console.log('Authenticated user creating project:', user.userId, user.userType);
+                
+                // Only homeowners can create projects
+                if (user.userType !== 'homeowner') {
+                    return {
+                        statusCode: 403,
+                        headers,
+                        body: JSON.stringify({ error: 'Only homeowners can create projects' })
+                    };
+                }
+                
+                const data = JSON.parse(event.body);
+                const item = {
+                    id: Date.now().toString(),
+                    userId: user.userId, // Associate project with user
+                    userEmail: user.email,
+                    ...data,
+                    createdAt: new Date().toISOString()
+                };
 
-            const command = new PutCommand({
-                TableName: process.env.PROJECTS_TABLE,
-                Item: item
-            });
+                const command = new PutCommand({
+                    TableName: process.env.PROJECTS_TABLE,
+                    Item: item
+                });
 
-            await dynamodb.send(command);
-            console.log('Project created:', item.id);
+                await dynamodb.send(command);
+                console.log('Project created for user:', user.userId, 'Project ID:', item.id);
 
-            return {
-                statusCode: 201,
-                headers,
-                body: JSON.stringify(item)
-            };
+                return {
+                    statusCode: 201,
+                    headers,
+                    body: JSON.stringify(item)
+                };
+            } catch (error) {
+                console.error('Authentication error:', error.message);
+                return {
+                    statusCode: 401,
+                    headers,
+                    body: JSON.stringify({ error: 'Unauthorized: ' + error.message })
+                };
+            }
         }
 
         // Address validation endpoint
@@ -819,7 +1056,7 @@ exports.handler = async (event) => {
                 error: 'Not found', 
                 path: path, 
                 method: method,
-                availablePaths: ['/health', '/auth/register', '/auth/login', '/auth/confirm', '/auth/resend-confirmation', '/projects', '/projects/validate-address']
+                availablePaths: ['/health', '/auth/register', '/auth/login', '/auth/confirm', '/auth/resend-confirmation', '/auth/forgot-password', '/auth/reset-password', '/projects', '/projects/validate-address']
             })
         };
 
