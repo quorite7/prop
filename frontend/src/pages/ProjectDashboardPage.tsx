@@ -10,33 +10,29 @@ import {
   CardActions,
   Button,
   Chip,
-  LinearProgress,
   Alert,
-  Stepper,
-  Step,
-  StepLabel,
-  StepContent,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Divider,
   useTheme,
   useMediaQuery,
   CircularProgress,
+  Tabs,
+  Tab,
+  Paper,
 } from '@mui/material';
 import {
-  CheckCircle as CheckIcon,
-  // Schedule as ScheduleIcon,
-  Warning as WarningIcon,
-  Assignment as AssignmentIcon,
-  // Build as BuildIcon,
+  Timeline as TimelineIcon,
+  Settings as SettingsIcon,
   Description as DescriptionIcon,
-  // AttachMoney as MoneyIcon,
   People as PeopleIcon,
 } from '@mui/icons-material';
 import { useAIAssistant } from '../contexts/AIAssistantContext';
 import { projectService, Project } from '../services/projectService';
+import ProjectOverviewTab from '../components/ProjectTabs/ProjectOverviewTab';
+import ProjectDetailsTab from '../components/ProjectTabs/ProjectDetailsTab';
+import SoWGenerationTab from '../components/ProjectTabs/SoWGenerationTab';
+import BuilderInvitationTab from '../components/ProjectTabs/BuilderInvitationTab';
+
+// Project status types
+type ProjectStatus = 'details_collection' | 'sow_generation' | 'sow_ready' | 'builders_invited' | 'quotes_received' | 'in_progress' | 'completed';
 
 const ProjectDashboardPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -50,16 +46,7 @@ const ProjectDashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [nextStepGuidance, setNextStepGuidance] = useState<string>('');
-
-  const projectSteps = [
-    { label: 'Project Created', description: 'Basic project information collected' },
-    { label: 'AI Analysis', description: 'AI analyzing requirements and generating Scope of Work' },
-    { label: 'Scope Review', description: 'Review and approve the generated Scope of Work' },
-    { label: 'Builder Matching', description: 'Share SoW with qualified builders' },
-    { label: 'Quote Collection', description: 'Receive and compare builder quotes' },
-    { label: 'Builder Selection', description: 'Select preferred builder and finalize contract' },
-    { label: 'Project Execution', description: 'Work begins according to agreed timeline' },
-  ];
+  const [activeTab, setActiveTab] = useState(0);
 
   useEffect(() => {
     const loadData = async () => {
@@ -90,22 +77,12 @@ const ProjectDashboardPage: React.FC = () => {
     loadData();
   }, [projectId, getGuidance]);
 
-  const getCurrentStepIndex = () => {
-    if (!project) return 0;
-    
-    switch (project.status) {
-      case 'planning': return project.sowId ? 2 : 1;
-      case 'in_progress': return project.selectedQuoteId ? 6 : 4;
-      case 'completed': return 6;
-      default: return 0;
-    }
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return 'success';
       case 'in_progress': return 'primary';
-      case 'on_hold': return 'warning';
+      case 'sow_ready': return 'info';
+      case 'details_collection': return 'warning';
       default: return 'default';
     }
   };
@@ -116,7 +93,7 @@ const ProjectDashboardPage: React.FC = () => {
   };
 
   const formatAddress = (address: Project['propertyAddress']) => {
-    return [address.line1, address.line2, address.city, address.postcode]
+    return [address?.line1, address?.line2, address?.city, address?.postcode]
       .filter(Boolean)
       .join(', ');
   };
@@ -231,8 +208,32 @@ const ProjectDashboardPage: React.FC = () => {
     );
   }
 
-  const currentStep = getCurrentStepIndex();
-  const progressPercentage = ((currentStep + 1) / projectSteps.length) * 100;
+  // Tabbed interface for individual project
+  const tabs = [
+    { label: 'Overview', icon: <TimelineIcon /> },
+    { label: 'Details', icon: <SettingsIcon /> },
+    { label: 'Scope of Work', icon: <DescriptionIcon /> },
+    { label: 'Builders', icon: <PeopleIcon /> },
+  ];
+
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setActiveTab(newValue);
+  };
+
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 0:
+        return <ProjectOverviewTab project={project} />;
+      case 1:
+        return <ProjectDetailsTab project={project} />;
+      case 2:
+        return <SoWGenerationTab project={project} />;
+      case 3:
+        return <BuilderInvitationTab project={project} />;
+      default:
+        return <ProjectOverviewTab project={project} />;
+    }
+  };
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -253,17 +254,6 @@ const ProjectDashboardPage: React.FC = () => {
             size="medium"
           />
         </Box>
-        
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            Project Progress: {Math.round(progressPercentage)}%
-          </Typography>
-          <LinearProgress 
-            variant="determinate" 
-            value={progressPercentage} 
-            sx={{ height: 8, borderRadius: 4 }}
-          />
-        </Box>
       </Box>
 
       {/* AI Guidance */}
@@ -278,232 +268,31 @@ const ProjectDashboardPage: React.FC = () => {
         </Alert>
       )}
 
-      <Grid container spacing={4}>
-        {/* Project Progress */}
-        <Grid item xs={12} lg={8}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Project Timeline
-              </Typography>
-              <Stepper 
-                activeStep={currentStep} 
-                orientation={isMobile ? 'vertical' : 'horizontal'}
-                alternativeLabel={!isMobile}
-              >
-                {projectSteps.map((step, index) => (
-                  <Step key={step.label} completed={index < currentStep}>
-                    <StepLabel>
-                      {step.label}
-                    </StepLabel>
-                    {isMobile && (
-                      <StepContent>
-                        <Typography variant="body2" color="text.secondary">
-                          {step.description}
-                        </Typography>
-                      </StepContent>
-                    )}
-                  </Step>
-                ))}
-              </Stepper>
-            </CardContent>
-          </Card>
-        </Grid>
+      {/* Tabbed Interface */}
+      <Paper sx={{ mb: 3 }}>
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          variant={isMobile ? 'scrollable' : 'fullWidth'}
+          scrollButtons="auto"
+          sx={{ borderBottom: 1, borderColor: 'divider' }}
+        >
+          {tabs.map((tab, index) => (
+            <Tab
+              key={index}
+              label={tab.label}
+              icon={tab.icon}
+              iconPosition="start"
+              sx={{ minHeight: 64 }}
+            />
+          ))}
+        </Tabs>
+      </Paper>
 
-        {/* Quick Actions */}
-        <Grid item xs={12} lg={4}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Quick Actions
-              </Typography>
-              <List dense>
-                {!project.sowId && (
-                  <ListItem>
-                    <ListItemIcon>
-                      <AssignmentIcon color="primary" />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary="Generate Scope of Work"
-                      secondary="AI will create detailed project specifications"
-                    />
-                  </ListItem>
-                )}
-                {project.sowId && !project.selectedQuoteId && (
-                  <ListItem>
-                    <ListItemIcon>
-                      <PeopleIcon color="primary" />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary="Find Builders"
-                      secondary="Share SoW with qualified builders"
-                    />
-                  </ListItem>
-                )}
-                <ListItem>
-                  <ListItemIcon>
-                    <DescriptionIcon />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary="View Documents"
-                    secondary={`${(project.documents || []).length} files uploaded`}
-                  />
-                </ListItem>
-              </List>
-            </CardContent>
-            <CardActions>
-              <Button variant="contained" fullWidth>
-                {!project.sowId ? 'Generate SoW' : 'View SoW'}
-              </Button>
-            </CardActions>
-          </Card>
-        </Grid>
-
-        {/* Project Details */}
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Project Details
-              </Typography>
-              <List dense>
-                <ListItem>
-                  <ListItemText
-                    primary="Project Type"
-                    secondary={formatProjectType(project.projectType || 'unknown')}
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemText
-                    primary="Created"
-                    secondary={new Date(project.createdAt || Date.now()).toLocaleDateString()}
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemText
-                    primary="Last Updated"
-                    secondary={new Date(project.updatedAt || Date.now()).toLocaleDateString()}
-                  />
-                </ListItem>
-                {project.requirements?.timeline && (
-                  <ListItem>
-                    <ListItemText
-                      primary="Timeline"
-                      secondary={project.requirements?.timeline}
-                    />
-                  </ListItem>
-                )}
-                {project.requirements?.budget && (
-                  <ListItem>
-                    <ListItemText
-                      primary="Budget Range"
-                      secondary={`£${project.requirements?.budget.min?.toLocaleString()} - £${project.requirements?.budget.max?.toLocaleString()}`}
-                    />
-                  </ListItem>
-                )}
-              </List>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Council Information */}
-        {project.councilData && (
-          <Grid item xs={12} md={6}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Planning Information
-                </Typography>
-                <List dense>
-                  <ListItem>
-                    <ListItemText
-                      primary="Local Authority"
-                      secondary={project.councilData?.localAuthority}
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemIcon>
-                      {project.councilData?.conservationArea ? 
-                        <WarningIcon color="warning" /> : 
-                        <CheckIcon color="success" />
-                      }
-                    </ListItemIcon>
-                    <ListItemText
-                      primary="Conservation Area"
-                      secondary={project.councilData?.conservationArea ? 'Yes - Additional restrictions apply' : 'No'}
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemIcon>
-                      {project.councilData?.listedBuilding ? 
-                        <WarningIcon color="warning" /> : 
-                        <CheckIcon color="success" />
-                      }
-                    </ListItemIcon>
-                    <ListItemText
-                      primary="Listed Building"
-                      secondary={project.councilData?.listedBuilding ? 'Yes - Special permissions required' : 'No'}
-                    />
-                  </ListItem>
-                </List>
-                {(project.councilData?.planningRestrictions || []).length > 0 && (
-                  <>
-                    <Divider sx={{ my: 1 }} />
-                    <Typography variant="body2" color="text.secondary" gutterBottom>
-                      Planning Restrictions:
-                    </Typography>
-                    {(project.councilData?.planningRestrictions || []).map((restriction, index) => (
-                      <Typography key={index} variant="body2" sx={{ ml: 2 }}>
-                        • {restriction}
-                      </Typography>
-                    ))}
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-        )}
-
-        {/* Requirements Summary */}
-        <Grid item xs={12}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Project Requirements
-              </Typography>
-              <Typography variant="body1" paragraph>
-                {project.requirements?.description}
-              </Typography>
-              
-              {project.requirements?.materials && project.requirements?.materials.length > 0 && (
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" color="text.secondary" gutterBottom>
-                    Material Preferences:
-                  </Typography>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                    {project.requirements?.materials.map((material, index) => (
-                      <Chip key={index} label={material} variant="outlined" size="small" />
-                    ))}
-                  </Box>
-                </Box>
-              )}
-
-              {project.requirements?.specialRequirements && project.requirements?.specialRequirements.length > 0 && (
-                <Box>
-                  <Typography variant="body2" color="text.secondary" gutterBottom>
-                    Special Requirements:
-                  </Typography>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                    {project.requirements?.specialRequirements.map((requirement, index) => (
-                      <Chip key={index} label={requirement} color="secondary" variant="outlined" size="small" />
-                    ))}
-                  </Box>
-                </Box>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+      {/* Tab Content */}
+      <Box sx={{ mt: 3 }}>
+        {renderTabContent()}
+      </Box>
     </Container>
   );
 };

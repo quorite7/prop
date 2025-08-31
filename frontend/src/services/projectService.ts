@@ -11,7 +11,7 @@ export interface Project {
     country: string;
   };
   projectType: string;
-  status: 'planning' | 'in_progress' | 'completed' | 'on_hold';
+  status: 'details_collection' | 'sow_generation' | 'sow_ready' | 'builders_invited' | 'quotes_received' | 'planning' | 'in_progress' | 'completed' | 'on_hold';
   requirements: {
     description: string;
     dimensions?: {
