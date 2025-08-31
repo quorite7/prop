@@ -18,6 +18,7 @@ import {
 import { ArrowBack, ArrowForward } from '@mui/icons-material';
 import { useAIAssistant } from '../contexts/AIAssistantContext';
 import { projectService, CreateProjectData } from '../services/projectService';
+import ProjectCreatedOverlay from '../components/ProjectCreatedOverlay';
 import AddressStep from '../components/ProjectCreation/AddressStep';
 import EnhancedProjectTypeStep from '../components/ProjectCreation/EnhancedProjectTypeStep';
 import RequirementsStep from '../components/ProjectCreation/RequirementsStep';
@@ -82,6 +83,8 @@ const ProjectCreationPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [guidance, setGuidance] = useState<string>('');
+  const [showOverlay, setShowOverlay] = useState(false);
+  const [createdProjectId, setCreatedProjectId] = useState<string>('');
 
   useEffect(() => {
     // Get AI guidance for the current step
@@ -132,7 +135,8 @@ const ProjectCreationPage: React.FC = () => {
         }
       }
 
-      navigate(`/app/projects/${project.id}`);
+      setCreatedProjectId(project.id);
+      setShowOverlay(true);
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Failed to create project. Please try again.');
     } finally {
@@ -292,6 +296,13 @@ const ProjectCreationPage: React.FC = () => {
           Step {activeStep + 1} of {steps.length}
         </Typography>
       </Box>
+      
+      {showOverlay && (
+        <ProjectCreatedOverlay
+          projectId={createdProjectId}
+          onComplete={() => setShowOverlay(false)}
+        />
+      )}
     </Container>
   );
 };
