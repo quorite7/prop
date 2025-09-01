@@ -1,3 +1,5 @@
+import { LocalDocument } from '../components/ProjectCreation/DocumentsStep';
+
 export interface ProjectFormData {
   propertyAddress: {
     line1: string;
@@ -22,7 +24,7 @@ export interface ProjectFormData {
     };
     specialRequirements?: string[];
   };
-  documents?: File[];
+  documents?: LocalDocument[];
 }
 
 export interface Requirements {

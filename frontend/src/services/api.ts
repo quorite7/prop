@@ -76,6 +76,11 @@ class ApiService {
     return response.data.data || response.data;
   }
 
+  async patch<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+    const response = await this.api.patch(url, data, config);
+    return response.data.data || response.data;
+  }
+
   async uploadFile<T>(url: string, file: File, onProgress?: (progress: number) => void): Promise<T> {
     const formData = new FormData();
     formData.append('file', file);

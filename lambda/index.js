@@ -1,16 +1,23 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, ScanCommand, PutCommand, QueryCommand, GetCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { DynamoDBDocumentClient, ScanCommand, PutCommand, QueryCommand, GetCommand, DeleteCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { CognitoIdentityProviderClient, AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminInitiateAuthCommand, AdminConfirmSignUpCommand, SignUpCommand, ConfirmSignUpCommand, ResendConfirmationCodeCommand, ForgotPasswordCommand, ConfirmForgotPasswordCommand } = require('@aws-sdk/client-cognito-identity-provider');
+const { S3Client, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { PutObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 
 const dynamoClient = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(dynamoClient);
 const cognito = new CognitoIdentityProviderClient({});
+const s3 = new S3Client({});
 
 // Environment variables
 const PROJECTS_TABLE = process.env.PROJECTS_TABLE;
 const BUILDER_ACCESS_TABLE = process.env.BUILDER_ACCESS_TABLE;
 const AUDIT_LOG_TABLE = process.env.AUDIT_LOG_TABLE;
+
+// Utility functions
+const generateId = () => uuidv4();
 
 // JWT validation and user extraction utilities
 function extractUserFromToken(authHeader) {
@@ -30,6 +37,7 @@ function extractUserFromToken(authHeader) {
         console.log('JWT payload:', JSON.stringify(payload, null, 2));
         
         return {
+            sub: payload.sub,
             userId: payload.sub,
             email: payload.email,
             userType: payload['custom:user_type'] || payload['custom:userType'] || 'homeowner',
@@ -1338,6 +1346,233 @@ exports.handler = async (event) => {
             }
         }
 
+        // Document upload URL endpoint - POST (requires authentication)
+        if (path === '/documents/upload-url' && method === 'POST') {
+            console.log('Getting document upload URL...');
+            
+            const authHeader = event.headers.Authorization || event.headers.authorization;
+            const user = await extractUserFromToken(authHeader);
+            if (!user) {
+                return requireAuth();
+            }
+
+            const { projectId, fileName, fileSize, mimeType, documentType } = JSON.parse(event.body);
+            
+            if (!projectId || !fileName || !fileSize || !mimeType || !documentType) {
+                return {
+                    statusCode: 400,
+                    headers,
+                    body: JSON.stringify({ error: { message: 'Missing required fields' } })
+                };
+            }
+
+            // Verify user owns the project
+            const projectResult = await dynamodb.send(new GetCommand({
+                TableName: 'uk-home-projects',
+                Key: { id: projectId }
+            }));
+
+            if (!projectResult.Item || projectResult.Item.userId !== user.sub) {
+                return {
+                    statusCode: 403,
+                    headers,
+                    body: JSON.stringify({ error: { message: 'Access denied' } })
+                };
+            }
+
+            const documentId = generateId();
+            const s3Key = `projects/${projectId}/documents/${documentId}/${fileName}`;
+            
+            // Create document record
+            await dynamodb.send(new PutCommand({
+                TableName: 'uk-home-documents',
+                Item: {
+                    id: documentId,
+                    projectId: projectId,
+                    userId: user.sub,
+                    fileName: fileName,
+                    originalName: fileName,
+                    fileSize: fileSize,
+                    mimeType: mimeType,
+                    documentType: documentType,
+                    s3Key: s3Key,
+                    uploadedAt: new Date().toISOString(),
+                    isVisibleToBuilders: false,
+                    status: 'pending'
+                }
+            }));
+
+            // Generate S3 upload URL
+            const uploadUrl = await getSignedUrl(s3, new PutObjectCommand({
+                Bucket: 'uk-home-documents-bucket',
+                Key: s3Key,
+                ContentType: mimeType
+            }), { expiresIn: 300 }); // 5 minutes
+
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify({
+                    uploadUrl: uploadUrl,
+                    documentId: documentId,
+                    s3Key: s3Key
+                })
+            };
+        }
+
+        // Confirm document upload - POST (requires authentication)
+        if (path.match(/^\/documents\/([^\/]+)\/confirm$/) && method === 'POST') {
+            const documentId = path.split('/')[2];
+            console.log('Confirming document upload:', documentId);
+            
+            const authHeader = event.headers.Authorization || event.headers.authorization;
+            const user = await extractUserFromToken(authHeader);
+            if (!user) {
+                return requireAuth();
+            }
+
+            // Update document status to confirmed
+            const result = await dynamodb.send(new UpdateCommand({
+                TableName: 'uk-home-documents',
+                Key: { id: documentId },
+                UpdateExpression: 'SET #status = :status',
+                ExpressionAttributeNames: {
+                    '#status': 'status'
+                },
+                ExpressionAttributeValues: {
+                    ':status': 'confirmed',
+                    ':userId': user.sub
+                },
+                ConditionExpression: 'userId = :userId',
+                ReturnValues: 'ALL_NEW'
+            }));
+
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify(result.Attributes)
+            };
+        }
+
+        // Get project documents - GET (requires authentication)
+        if (path.match(/^\/projects\/([^\/]+)\/documents$/) && method === 'GET') {
+            const projectId = path.split('/')[2];
+            console.log('Getting project documents:', projectId);
+            
+            const authHeader = event.headers.Authorization || event.headers.authorization;
+            const user = await extractUserFromToken(authHeader);
+            if (!user) {
+                return requireAuth();
+            }
+
+            // Verify user owns the project
+            const projectResult = await dynamodb.send(new GetCommand({
+                TableName: 'uk-home-projects',
+                Key: { id: projectId }
+            }));
+
+            if (!projectResult.Item || projectResult.Item.userId !== user.sub) {
+                return {
+                    statusCode: 403,
+                    headers,
+                    body: JSON.stringify({ error: { message: 'Access denied' } })
+                };
+            }
+
+            // Get documents for this project
+            const result = await dynamodb.send(new QueryCommand({
+                TableName: 'uk-home-documents',
+                IndexName: 'ProjectIdIndex',
+                KeyConditionExpression: 'projectId = :projectId',
+                ExpressionAttributeValues: {
+                    ':projectId': projectId
+                }
+            }));
+
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify(result.Items || [])
+            };
+        }
+
+        // Initialize project documents - POST (requires authentication) - for new projects
+        if (path.match(/^\/projects\/([^\/]+)\/documents$/) && method === 'POST') {
+            const projectId = path.split('/')[2];
+            console.log('Initializing project documents:', projectId);
+            
+            const authHeader = event.headers.Authorization || event.headers.authorization;
+            const user = await extractUserFromToken(authHeader);
+            if (!user) {
+                return requireAuth();
+            }
+
+            // Verify user owns the project
+            const projectResult = await dynamodb.send(new GetCommand({
+                TableName: 'uk-home-projects',
+                Key: { id: projectId }
+            }));
+
+            if (!projectResult.Item || projectResult.Item.userId !== user.sub) {
+                return {
+                    statusCode: 403,
+                    headers,
+                    body: JSON.stringify({ error: { message: 'Access denied' } })
+                };
+            }
+
+            // Return empty array for new projects
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify([])
+            };
+        }
+
+        // Delete document - DELETE (requires authentication)
+        if (path.match(/^\/documents\/([^\/]+)$/) && method === 'DELETE') {
+            const documentId = path.split('/')[2];
+            console.log('Deleting document:', documentId);
+            
+            const authHeader = event.headers.Authorization || event.headers.authorization;
+            const user = await extractUserFromToken(authHeader);
+            if (!user) {
+                return requireAuth();
+            }
+
+            // Get document to verify ownership and get S3 key
+            const docResult = await dynamodb.send(new GetCommand({
+                TableName: 'uk-home-documents',
+                Key: { id: documentId }
+            }));
+
+            if (!docResult.Item || docResult.Item.userId !== user.sub) {
+                return {
+                    statusCode: 403,
+                    headers,
+                    body: JSON.stringify({ error: { message: 'Access denied' } })
+                };
+            }
+
+            // Delete from S3
+            await s3.send(new DeleteObjectCommand({
+                Bucket: 'uk-home-documents-bucket',
+                Key: docResult.Item.s3Key
+            }));
+
+            // Delete from DynamoDB
+            await dynamodb.send(new DeleteCommand({
+                TableName: 'uk-home-documents',
+                Key: { id: documentId }
+            }));
+
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify({ message: 'Document deleted successfully' })
+            };
+        }
+
         console.log('ERROR: Route not found');
         return {
             statusCode: 404,
@@ -1346,7 +1581,7 @@ exports.handler = async (event) => {
                 error: 'Not found', 
                 path: path, 
                 method: method,
-                availablePaths: ['/health', '/auth/register', '/auth/login', '/auth/confirm', '/auth/resend-confirmation', '/auth/forgot-password', '/auth/reset-password', '/projects', '/projects/validate-address', '/projects/invite-builder', '/projects/remove-builder', '/projects/access']
+                availablePaths: ['/health', '/auth/register', '/auth/login', '/auth/confirm', '/auth/resend-confirmation', '/auth/forgot-password', '/auth/reset-password', '/projects', '/projects/validate-address', '/projects/invite-builder', '/projects/remove-builder', '/projects/access', '/documents/upload-url', '/documents/*/confirm', '/projects/*/documents', '/documents/*']
             })
         };
 

@@ -18,17 +18,18 @@ import {
 import { ArrowBack, ArrowForward } from '@mui/icons-material';
 import { useAIAssistant } from '../contexts/AIAssistantContext';
 import { projectService, CreateProjectData } from '../services/projectService';
+import { documentService } from '../services/documentService';
 import ProjectCreatedOverlay from '../components/ProjectCreatedOverlay';
 import AddressStep from '../components/ProjectCreation/AddressStep';
 import EnhancedProjectTypeStep from '../components/ProjectCreation/EnhancedProjectTypeStep';
-import RequirementsStep from '../components/ProjectCreation/RequirementsStep';
-import DocumentsStep from '../components/ProjectCreation/DocumentsStep';
+import ProjectVisionStep from '../components/ProjectCreation/ProjectVisionStep';
+import DocumentsStep, { LocalDocument } from '../components/ProjectCreation/DocumentsStep';
 import ReviewStep from '../components/ProjectCreation/ReviewStep';
 
 const steps = [
   'Property Address',
   'Project Type',
-  'Requirements',
+  'Project Vision',
   'Documents',
   'Review & Create',
 ];
@@ -57,7 +58,7 @@ interface ProjectFormData {
     };
     specialRequirements?: string[];
   };
-  documents?: File[];
+  documents?: LocalDocument[];
 }
 
 const ProjectCreationPage: React.FC = () => {
@@ -131,7 +132,7 @@ const ProjectCreationPage: React.FC = () => {
       // Upload documents if any
       if (formData.documents && formData.documents.length > 0) {
         for (const document of formData.documents) {
-          await projectService.uploadDocument(project.id, document);
+          await documentService.uploadDocument(project.id, document.file, document.documentType);
         }
       }
 
@@ -156,7 +157,7 @@ const ProjectCreationPage: React.FC = () => {
                  formData.propertyAddress.postcode);
       case 1: // Project Type
         return !!formData.projectType;
-      case 2: // Requirements
+      case 2: // Project Vision
         return !!formData.requirements.description;
       case 3: // Documents
         return true; // Optional step
@@ -187,7 +188,7 @@ const ProjectCreationPage: React.FC = () => {
         );
       case 2:
         return (
-          <RequirementsStep
+          <ProjectVisionStep
             data={formData.requirements}
             projectType={formData.projectType}
             onChange={(requirements) => updateFormData({ requirements })}

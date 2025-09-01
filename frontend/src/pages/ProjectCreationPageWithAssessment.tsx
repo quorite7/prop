@@ -22,8 +22,8 @@ import { PropertyAssessment } from '../services/propertyAssessmentService';
 import AddressStep from '../components/ProjectCreation/AddressStep';
 import PropertyAssessmentStep from '../components/ProjectCreation/PropertyAssessmentStep';
 import EnhancedProjectTypeStep from '../components/ProjectCreation/EnhancedProjectTypeStep';
-import RequirementsStep from '../components/ProjectCreation/RequirementsStep';
-import DocumentsStep from '../components/ProjectCreation/DocumentsStep';
+import ProjectVisionStep from '../components/ProjectCreation/ProjectVisionStep';
+import DocumentsStep, { LocalDocument } from '../components/ProjectCreation/DocumentsStep';
 import ReviewStep from '../components/ProjectCreation/ReviewStep';
 
 const steps = [
@@ -60,7 +60,7 @@ interface ProjectFormData {
     };
     specialRequirements?: string[];
   };
-  documents?: File[];
+  documents?: LocalDocument[];
 }
 
 const ProjectCreationPage: React.FC = () => {
@@ -152,7 +152,7 @@ const ProjectCreationPage: React.FC = () => {
     handleNext();
   };
 
-  const handleDocumentsComplete = (documents: File[]) => {
+  const handleDocumentsComplete = (documents: LocalDocument[]) => {
     setFormData(prev => ({
       ...prev,
       documents,
@@ -237,7 +237,7 @@ const ProjectCreationPage: React.FC = () => {
         );
       case 3:
         return (
-          <RequirementsStep
+          <ProjectVisionStep
             projectType={formData.projectType}
             initialData={formData.requirements}
             onComplete={handleRequirementsComplete}

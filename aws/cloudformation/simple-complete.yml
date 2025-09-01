@@ -31,7 +31,51 @@ Resources:
               KeyType: HASH
           Projection:
             ProjectionType: ALL
-          BillingMode: PAY_PER_REQUEST
+
+  DocumentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: uk-home-documents
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: projectId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: ProjectIdIndex
+          KeySchema:
+            - AttributeName: projectId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: UserIdIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  DocumentsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: uk-home-documents-bucket
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
 
   BuilderProjectAccessTable:
     Type: AWS::DynamoDB::Table
@@ -55,7 +99,6 @@ Resources:
               KeyType: HASH
           Projection:
             ProjectionType: ALL
-          BillingMode: PAY_PER_REQUEST
 
   AuditLogTable:
     Type: AWS::DynamoDB::Table
@@ -97,9 +140,26 @@ Resources:
                 Resource: 
                   - !GetAtt ProjectsTable.Arn
                   - !Sub '${ProjectsTable.Arn}/index/*'
+                  - !GetAtt DocumentsTable.Arn
+                  - !Sub '${DocumentsTable.Arn}/index/*'
                   - !GetAtt BuilderProjectAccessTable.Arn
                   - !Sub '${BuilderProjectAccessTable.Arn}/index/*'
                   - !GetAtt AuditLogTable.Arn
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:GetObjectVersion
+                Resource: !Sub '${DocumentsBucket}/*'
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !GetAtt DocumentsBucket.Arn
 
   # Lambda Function
   ApiFunction:
