@@ -177,8 +177,10 @@ Resources:
           PROJECTS_TABLE: !Ref ProjectsTable
           BUILDER_ACCESS_TABLE: !Ref BuilderProjectAccessTable
           AUDIT_LOG_TABLE: !Ref AuditLogTable
-          USER_POOL_ID: eu-west-2_LY6wiylnT
-          USER_POOL_CLIENT_ID: 40t1l2d5m70t3cg0b39dvglkjs
+          USER_POOL_ID: !Ref UserPool
+          USER_POOL_CLIENT_ID: !Ref UserPoolClient
+          DOCUMENTS_TABLE: !Ref DocumentsTable
+          DOCUMENTS_BUCKET: !Ref DocumentsBucket
       Timeout: 30
 
   # API Gateway

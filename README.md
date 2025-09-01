@@ -19,8 +19,8 @@ Deploys the complete stack to AWS
 ## Live URLs
 
 - **Frontend**: https://d41avezevb35d.cloudfront.net
-- **API**: https://dkjzt6ibsj.execute-api.eu-west-2.amazonaws.com/prod
-- **Health Check**: https://dkjzt6ibsj.execute-api.eu-west-2.amazonaws.com/prod/health
+- **API**: https://rdy68tyyp1.execute-api.eu-west-2.amazonaws.com/prod
+- **Health Check**: https://rdy68tyyp1.execute-api.eu-west-2.amazonaws.com/prod/health
 
 ## Project Structure
 

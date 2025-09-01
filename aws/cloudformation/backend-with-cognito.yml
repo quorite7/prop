@@ -136,8 +136,7 @@ Resources:
       RestApiId: !Ref Api
       ResourceId: !Ref ApiResource
       HttpMethod: ANY
-      AuthorizationType: COGNITO_USER_POOLS
-      AuthorizerId: !Ref ApiAuthorizer
+      AuthorizationType: NONE
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST

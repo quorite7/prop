@@ -33,7 +33,7 @@ export interface LoginResponse {
 }
 
 class AuthService {
-  private baseUrl = process.env.REACT_APP_API_URL || 'https://dkjzt6ibsj.execute-api.eu-west-2.amazonaws.com/prod';
+  private baseUrl = process.env.REACT_APP_API_URL || 'https://rdy68tyyp1.execute-api.eu-west-2.amazonaws.com/prod';
   private tokens: AuthTokens | null = null;
 
   /**

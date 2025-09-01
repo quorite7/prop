@@ -26,5 +26,5 @@ aws cloudfront create-invalidation --distribution-id $CLOUDFRONT_ID --paths "/*"
 
 echo "✅ Deployment complete!"
 echo "🌐 Frontend: https://d41avezevb35d.cloudfront.net"
-echo "🔗 API: https://dkjzt6ibsj.execute-api.eu-west-2.amazonaws.com/prod"
-echo "🧪 Test: curl https://dkjzt6ibsj.execute-api.eu-west-2.amazonaws.com/prod/health"
+echo "🔗 API: https://rdy68tyyp1.execute-api.eu-west-2.amazonaws.com/prod"
+echo "🧪 Test: curl https://rdy68tyyp1.execute-api.eu-west-2.amazonaws.com/prod/health"
