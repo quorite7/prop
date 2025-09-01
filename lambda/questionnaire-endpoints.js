@@ -35,16 +35,24 @@ Respond with a JSON object containing:
 
 If you believe enough information has been gathered (typically after 8-12 questions), set isComplete to true.`;
 
-        const bedrockService = require('./services/bedrockService');
-        const response = await bedrockService.invoke('claude-3-haiku', prompt, { maxTokens: 1000 });
+        const command = new InvokeModelCommand({
+            modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
+            body: JSON.stringify({
+                anthropic_version: 'bedrock-2023-05-31',
+                max_tokens: 1000,
+                messages: [{
+                    role: 'user',
+                    content: prompt
+                }]
+            }),
+            contentType: 'application/json',
+            accept: 'application/json'
+        });
 
-        // More capable - AmitD - Change Bedrock models in eu-west-2
-        //const response = await bedrockService.invoke('claude-3-sonnet', prompt, { maxTokens: 2000 });
-
-        // Amazon's model - AmitD - Change Bedrock models in eu-west-2
-        //const response = await bedrockService.invoke('titan-text', prompt);
+        const response = await bedrock.send(command);
+        const responseBody = JSON.parse(new TextDecoder().decode(response.body));
         
-        return JSON.parse(response);
+        return JSON.parse(responseBody.content[0].text);
     } catch (error) {
         console.error('AI question generation error:', error);
         // Fallback to predefined questions
