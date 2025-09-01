@@ -234,7 +234,7 @@ const ProjectOverviewTab: React.FC<ProjectOverviewTabProps> = ({ project }) => {
         <Card sx={{ mb: 3 }}>
           <CardContent>
             <Typography variant="h6" gutterBottom>
-              Requirements Summary
+              Project Vision
             </Typography>
             <Typography variant="body2" paragraph>
               {project.requirements?.description || 'No description provided'}
