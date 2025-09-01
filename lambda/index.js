@@ -1932,7 +1932,28 @@ Generate a single, specific question that will help builders provide better quot
                 };
             }
         }
-        console.log('ERROR: Route not found');
+        
+        // Get available Bedrock models - GET /bedrock/models
+        if (path.match(/^\/(?:prod\/)?bedrock\/models$/) && method === 'GET') {
+            try {
+                const bedrockService = require('./services/bedrockService');
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify({
+                        models: bedrockService.getAvailableModels(),
+                        defaultModel: 'claude-3-haiku'
+                    })
+                };
+            } catch (error) {
+                console.error('Get Bedrock models error:', error);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ error: error.message })
+                };
+            }
+        }        console.log('ERROR: Route not found');
         return {
             statusCode: 404,
             headers,

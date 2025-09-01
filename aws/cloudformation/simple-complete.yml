@@ -228,7 +228,14 @@ Resources:
               - Effect: Allow
                 Action:
                   - bedrock:InvokeModel
-                Resource: 'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0'
+                Resource: 
+                  - 'arn:aws:bedrock:eu-west-2::foundation-model/anthropic.claude-3-haiku-20240307-v1:0'
+                  - 'arn:aws:bedrock:eu-west-2::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0'
+                  - 'arn:aws:bedrock:eu-west-2::foundation-model/anthropic.claude-3-opus-20240229-v1:0'
+                  - 'arn:aws:bedrock:eu-west-2::foundation-model/anthropic.claude-3-5-sonnet-20240620-v1:0'
+                  - 'arn:aws:bedrock:eu-west-2::foundation-model/amazon.titan-text-express-v1'
+                  - 'arn:aws:bedrock:eu-west-2::foundation-model/meta.llama2-13b-chat-v1'
+                  - 'arn:aws:bedrock:eu-west-2::foundation-model/meta.llama2-70b-chat-v1'
         - PolicyName: CognitoAccess
           PolicyDocument:
             Version: '2012-10-17'
