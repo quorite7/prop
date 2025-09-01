@@ -1,0 +1,12 @@
+{
+  "Variables": {
+    "AUDIT_LOG_TABLE": "uk-home-audit-log",
+    "PROJECTS_TABLE": "uk-home-projects",
+    "BUILDER_ACCESS_TABLE": "uk-home-builder-access",
+    "DOCUMENTS_TABLE": "uk-home-documents",
+    "DOCUMENTS_BUCKET": "uk-home-documents-bucket",
+    "QUESTIONNAIRE_TABLE": "uk-home-questionnaire-sessions",
+    "USER_POOL_CLIENT_ID": "3ee0qu053h4nosjnmclron3uq1",
+    "USER_POOL_ID": "eu-west-2_eqqpUSmNy"
+  }
+}

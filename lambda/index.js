@@ -4,17 +4,20 @@ const { CognitoIdentityProviderClient, AdminCreateUserCommand, AdminSetUserPassw
 const { S3Client, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { PutObjectCommand } = require('@aws-sdk/client-s3');
+const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 const { v4: uuidv4 } = require('uuid');
 
 const dynamoClient = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(dynamoClient);
 const cognito = new CognitoIdentityProviderClient({});
 const s3 = new S3Client({});
+const bedrock = new BedrockRuntimeClient({ region: 'eu-west-2' });
 
 // Environment variables
 const PROJECTS_TABLE = process.env.PROJECTS_TABLE;
 const BUILDER_ACCESS_TABLE = process.env.BUILDER_ACCESS_TABLE;
 const AUDIT_LOG_TABLE = process.env.AUDIT_LOG_TABLE;
+const QUESTIONNAIRE_TABLE = process.env.QUESTIONNAIRE_TABLE || 'questionnaire-sessions';
 
 // Utility functions
 const generateId = () => uuidv4();
@@ -1572,7 +1575,363 @@ exports.handler = async (event) => {
                 body: JSON.stringify({ message: 'Document deleted successfully' })
             };
         }
+        // Questionnaire endpoints
+        
+        // Start questionnaire - POST /projects/{projectId}/questionnaire/start
+        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/questionnaire\/start$/) && method === 'POST') {
+            try {
+                const user = requireAuth(event);
+                const projectId = path.split('/')[2] === 'prod' ? path.split('/')[3] : path.split('/')[2];
+                
+                // Verify project ownership
+                if (!await isProjectOwner(user.userId, projectId)) {
+                    return {
+                        statusCode: 403,
+                        headers,
+                        body: JSON.stringify({ error: 'Access denied' })
+                    };
+                }
 
+                const sessionId = generateId();
+                const session = {
+                    id: sessionId,
+                    projectId,
+                    userId: user.userId,
+                    currentQuestionIndex: 0,
+                    responses: [],
+                    isComplete: false,
+                    completionPercentage: 0,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+
+                await dynamodb.send(new PutCommand({
+                    TableName: QUESTIONNAIRE_TABLE,
+                    Item: session
+                }));
+
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify(session)
+                };
+            } catch (error) {
+                console.error('Start questionnaire error:', error);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ error: error.message })
+                };
+            }
+        }
+
+        // Get questionnaire session - GET /projects/{projectId}/questionnaire
+        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/questionnaire$/) && method === 'GET') {
+            try {
+                const user = requireAuth(event);
+                const projectId = path.split('/')[2] === 'prod' ? path.split('/')[3] : path.split('/')[2];
+                
+                // Verify project ownership
+                if (!await isProjectOwner(user.userId, projectId)) {
+                    return {
+                        statusCode: 403,
+                        headers,
+                        body: JSON.stringify({ error: 'Access denied' })
+                    };
+                }
+
+                const result = await dynamodb.send(new QueryCommand({
+                    TableName: QUESTIONNAIRE_TABLE,
+                    IndexName: 'ProjectIdIndex',
+                    KeyConditionExpression: 'projectId = :projectId',
+                    ExpressionAttributeValues: { ':projectId': projectId },
+                    ScanIndexForward: false,
+                    Limit: 1
+                }));
+
+                if (!result.Items || result.Items.length === 0) {
+                    return {
+                        statusCode: 404,
+                        headers,
+                        body: JSON.stringify({ error: 'No questionnaire session found' })
+                    };
+                }
+
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify(result.Items[0])
+                };
+            } catch (error) {
+                console.error('Get questionnaire session error:', error);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ error: error.message })
+                };
+            }
+        }
+
+        // Get next question - POST /projects/{projectId}/questionnaire/{sessionId}/next
+        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/questionnaire\/([^\/]+)\/next$/) && method === 'POST') {
+            try {
+                const user = requireAuth(event);
+                const pathParts = path.split('/');
+                const projectId = pathParts[2] === 'prod' ? pathParts[3] : pathParts[2];
+                const sessionId = pathParts[pathParts.length - 2];
+                
+                // Verify project ownership
+                if (!await isProjectOwner(user.userId, projectId)) {
+                    return {
+                        statusCode: 403,
+                        headers,
+                        body: JSON.stringify({ error: 'Access denied' })
+                    };
+                }
+
+                // Get project details for context
+                const projectResult = await dynamodb.send(new GetCommand({
+                    TableName: PROJECTS_TABLE,
+                    Key: { id: projectId }
+                }));
+
+                if (!projectResult.Item) {
+                    return {
+                        statusCode: 404,
+                        headers,
+                        body: JSON.stringify({ error: 'Project not found' })
+                    };
+                }
+
+                // Get session
+                const sessionResult = await dynamodb.send(new GetCommand({
+                    TableName: QUESTIONNAIRE_TABLE,
+                    Key: { id: sessionId }
+                }));
+
+                if (!sessionResult.Item) {
+                    return {
+                        statusCode: 404,
+                        headers,
+                        body: JSON.stringify({ error: 'Session not found' })
+                    };
+                }
+
+                const session = sessionResult.Item;
+                const project = projectResult.Item;
+
+                // Try to generate AI question using Bedrock
+                let aiResponse;
+                try {
+                    const prompt = `You are an expert home improvement consultant. Based on the project details below, generate the next most important question to ask the homeowner.
+
+Project Details:
+- Type: ${project.projectType}
+- Description: ${project.description || 'Not specified'}
+- Budget: ${project.budget || 'Not specified'}
+- Timeline: ${project.timeline || 'Not specified'}
+- Previous responses: ${JSON.stringify(session.responses || [])}
+
+Generate a single, specific question that will help builders provide better quotes. Return ONLY a JSON object with this structure:
+{
+  "question": {
+    "id": "unique_question_id",
+    "text": "Your question here",
+    "type": "multiple_choice|text|scale",
+    "options": ["option1", "option2"] (only for multiple_choice),
+    "required": true|false
+  },
+  "reasoning": "Brief explanation of why this question is important"
+}`;
+
+                    console.log('Attempting Bedrock AI generation...');
+                    const command = new InvokeModelCommand({
+                        modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
+                        body: JSON.stringify({
+                            anthropic_version: 'bedrock-2023-05-31',
+                            max_tokens: 1000,
+                            messages: [{
+                                role: 'user',
+                                content: prompt
+                            }]
+                        }),
+                        contentType: 'application/json',
+                        accept: 'application/json'
+                    });
+
+                    const response = await bedrock.send(command);
+                    const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+                    aiResponse = JSON.parse(responseBody.content[0].text);
+                    aiResponse.isComplete = session.currentQuestionIndex >= 8; // Complete after 8 questions
+                    aiResponse.isAIGenerated = true;
+                    console.log('AI generation successful');
+                } catch (aiError) {
+                    console.error('AI generation failed:', aiError.message);
+                    console.error('Full error:', JSON.stringify(aiError, null, 2));
+                    
+                    // Use fallback questions
+                    const fallbackQuestions = [
+                        {
+                            id: 'project_priority',
+                            text: 'What is your main priority for this project?',
+                            type: 'multiple_choice',
+                            options: ['Quality', 'Speed', 'Budget', 'Minimal disruption'],
+                            required: true
+                        },
+                        {
+                            id: 'specific_requirements',
+                            text: 'Are there any specific requirements or constraints we should know about?',
+                            type: 'text',
+                            required: false
+                        },
+                        {
+                            id: 'material_preferences',
+                            text: 'Do you have any material preferences?',
+                            type: 'text',
+                            required: false
+                        },
+                        {
+                            id: 'completion_urgency',
+                            text: 'How urgent is the completion of this project?',
+                            type: 'scale',
+                            required: true
+                        }
+                    ];
+
+                    const questionIndex = Math.min(session.currentQuestionIndex, fallbackQuestions.length - 1);
+                    aiResponse = {
+                        question: fallbackQuestions[questionIndex],
+                        isComplete: session.currentQuestionIndex >= fallbackQuestions.length - 1,
+                        reasoning: 'Using standard questions (AI temporarily unavailable)',
+                        isAIGenerated: false,
+                        fallbackReason: aiError.message
+                    };
+                }
+
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify(aiResponse)
+                };
+            } catch (error) {
+                console.error('Get next question error:', error);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ error: error.message })
+                };
+            }
+        }
+
+        // Submit response - POST /projects/{projectId}/questionnaire/{sessionId}/response
+        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/questionnaire\/([^\/]+)\/response$/) && method === 'POST') {
+            try {
+                const user = requireAuth(event);
+                const pathParts = path.split('/');
+                const projectId = pathParts[2] === 'prod' ? pathParts[3] : pathParts[2];
+                const sessionId = pathParts[pathParts.length - 2];
+                
+                // Verify project ownership
+                if (!await isProjectOwner(user.userId, projectId)) {
+                    return {
+                        statusCode: 403,
+                        headers,
+                        body: JSON.stringify({ error: 'Access denied' })
+                    };
+                }
+
+                const requestData = JSON.parse(event.body);
+                const response = {
+                    ...requestData,
+                    timestamp: new Date().toISOString()
+                };
+
+                // Update session with new response
+                const result = await dynamodb.send(new UpdateCommand({
+                    TableName: QUESTIONNAIRE_TABLE,
+                    Key: { id: sessionId },
+                    UpdateExpression: 'SET responses = list_append(if_not_exists(responses, :empty_list), :response), currentQuestionIndex = currentQuestionIndex + :inc, completionPercentage = :completion, updatedAt = :updatedAt',
+                    ExpressionAttributeValues: {
+                        ':response': [response],
+                        ':inc': 1,
+                        ':completion': Math.min(100, ((requestData.currentQuestionIndex || 0) + 1) * 10),
+                        ':updatedAt': new Date().toISOString(),
+                        ':empty_list': []
+                    },
+                    ReturnValues: 'ALL_NEW'
+                }));
+
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify(result.Attributes)
+                };
+            } catch (error) {
+                console.error('Submit response error:', error);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ error: error.message })
+                };
+            }
+        }
+
+        // Complete questionnaire - POST /projects/{projectId}/questionnaire/{sessionId}/complete
+        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/questionnaire\/([^\/]+)\/complete$/) && method === 'POST') {
+            try {
+                const user = requireAuth(event);
+                const pathParts = path.split('/');
+                const projectId = pathParts[2] === 'prod' ? pathParts[3] : pathParts[2];
+                const sessionId = pathParts[pathParts.length - 2];
+                
+                // Verify project ownership
+                if (!await isProjectOwner(user.userId, projectId)) {
+                    return {
+                        statusCode: 403,
+                        headers,
+                        body: JSON.stringify({ error: 'Access denied' })
+                    };
+                }
+
+                // Mark session as complete
+                const result = await dynamodb.send(new UpdateCommand({
+                    TableName: QUESTIONNAIRE_TABLE,
+                    Key: { id: sessionId },
+                    UpdateExpression: 'SET isComplete = :complete, completionPercentage = :completion, updatedAt = :updatedAt',
+                    ExpressionAttributeValues: {
+                        ':complete': true,
+                        ':completion': 100,
+                        ':updatedAt': new Date().toISOString()
+                    },
+                    ReturnValues: 'ALL_NEW'
+                }));
+
+                // Update project status to indicate details collection is complete
+                await dynamodb.send(new UpdateCommand({
+                    TableName: PROJECTS_TABLE,
+                    Key: { id: projectId },
+                    UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+                    ExpressionAttributeNames: { '#status': 'status' },
+                    ExpressionAttributeValues: {
+                        ':status': 'sow_generation',
+                        ':updatedAt': new Date().toISOString()
+                    }
+                }));
+
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify(result.Attributes)
+                };
+            } catch (error) {
+                console.error('Complete questionnaire error:', error);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ error: error.message })
+                };
+            }
+        }
         console.log('ERROR: Route not found');
         return {
             statusCode: 404,
