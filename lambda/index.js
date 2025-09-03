@@ -11,7 +11,7 @@ const dynamoClient = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(dynamoClient);
 const cognito = new CognitoIdentityProviderClient({});
 const s3 = new S3Client({});
-const bedrock = new BedrockRuntimeClient({ region: 'eu-west-2' });
+const bedrockRuntimeClient = new BedrockRuntimeClient({ region: 'eu-west-2' });
 
 // Environment variables
 const PROJECTS_TABLE = process.env.PROJECTS_TABLE;
@@ -1759,10 +1759,10 @@ Generate a single, specific question that will help builders provide better quot
                         accept: 'application/json'
                     });
 
-                    const response = await bedrock.send(command);
+                    const response = await bedrockRuntimeClient.send(command);
                     const responseBody = JSON.parse(new TextDecoder().decode(response.body));
                     aiResponse = JSON.parse(responseBody.content[0].text);
-                    aiResponse.isComplete = session.currentQuestionIndex >= 8; // Complete after 8 questions
+                    aiResponse.isComplete = session.currentQuestionIndex >= 8; // AmitD: Temporary stop LLM to 8 questions
                     aiResponse.isAIGenerated = true;
                     console.log('AI generation successful');
                 } catch (aiError) {
@@ -1841,6 +1841,24 @@ Generate a single, specific question that will help builders provide better quot
                 }
 
                 const requestData = JSON.parse(event.body);
+                
+                // Get current session to check question index
+                const sessionResult = await dynamodb.send(new GetCommand({
+                    TableName: QUESTIONNAIRE_TABLE,
+                    Key: { id: sessionId }
+                }));
+
+                if (!sessionResult.Item) {
+                    return {
+                        statusCode: 404,
+                        headers,
+                        body: JSON.stringify({ error: 'Session not found' })
+                    };
+                }
+
+                const currentSession = sessionResult.Item;
+                const newQuestionIndex = currentSession.currentQuestionIndex + 1;
+                const isComplete = newQuestionIndex >= 8; // AmitD: Temporary stop LLM to 8 questions
                 const response = {
                     ...requestData,
                     timestamp: new Date().toISOString()
@@ -1850,11 +1868,12 @@ Generate a single, specific question that will help builders provide better quot
                 const result = await dynamodb.send(new UpdateCommand({
                     TableName: QUESTIONNAIRE_TABLE,
                     Key: { id: sessionId },
-                    UpdateExpression: 'SET responses = list_append(if_not_exists(responses, :empty_list), :response), currentQuestionIndex = currentQuestionIndex + :inc, completionPercentage = :completion, updatedAt = :updatedAt',
+                    UpdateExpression: 'SET responses = list_append(if_not_exists(responses, :empty_list), :response), currentQuestionIndex = currentQuestionIndex + :inc, completionPercentage = :completion, isComplete = :isComplete, updatedAt = :updatedAt', // AmitD: Temporary stop LLM to 8 questions
                     ExpressionAttributeValues: {
                         ':response': [response],
                         ':inc': 1,
-                        ':completion': Math.min(100, ((requestData.currentQuestionIndex || 0) + 1) * 10),
+                        ':completion': Math.min(100, newQuestionIndex * 10),
+                        ':isComplete': isComplete, // AmitD: Temporary stop LLM to 8 questions
                         ':updatedAt': new Date().toISOString(),
                         ':empty_list': []
                     },
