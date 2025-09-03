@@ -26,6 +26,7 @@ import {
 } from '@mui/icons-material';
 import { useAIAssistant } from '../contexts/AIAssistantContext';
 import { projectService, Project } from '../services/projectService';
+import { questionnaireService } from '../services/questionnaireService';
 import ProjectOverviewTab from '../components/ProjectTabs/ProjectOverviewTab';
 import ProjectDetailsTab from '../components/ProjectTabs/ProjectDetailsTab';
 import SoWGenerationTab from '../components/ProjectTabs/SoWGenerationTab';
@@ -47,6 +48,7 @@ const ProjectDashboardPage: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [nextStepGuidance, setNextStepGuidance] = useState<string>('');
   const [activeTab, setActiveTab] = useState(0);
+  const [isQuestionnaireComplete, setIsQuestionnaireComplete] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -55,6 +57,10 @@ const ProjectDashboardPage: React.FC = () => {
           // Load specific project
           const projectData = await projectService.getProject(projectId);
           setProject(projectData);
+
+          // Check questionnaire completion status
+          const questionnaireSession = await questionnaireService.getQuestionnaireSession(projectId);
+          setIsQuestionnaireComplete(questionnaireSession?.isComplete || false);
           
           // Get AI guidance for next steps
           const guidance = await getGuidance('project next steps', {
@@ -216,6 +222,17 @@ const ProjectDashboardPage: React.FC = () => {
     { label: 'Builders', icon: <PeopleIcon /> },
   ];
 
+  const refreshQuestionnaireStatus = async () => {
+    if (projectId) {
+      try {
+        const questionnaireSession = await questionnaireService.getQuestionnaireSession(projectId);
+        setIsQuestionnaireComplete(questionnaireSession?.isComplete || false);
+      } catch (error) {
+        console.error('Error refreshing questionnaire status:', error);
+      }
+    }
+  };
+
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
   };
@@ -225,9 +242,9 @@ const ProjectDashboardPage: React.FC = () => {
       case 0:
         return <ProjectOverviewTab project={project} />;
       case 1:
-        return <ProjectDetailsTab project={project} />;
+        return <ProjectDetailsTab project={project} onQuestionnaireComplete={refreshQuestionnaireStatus} />;
       case 2:
-        return <SoWGenerationTab project={project} />;
+        return <SoWGenerationTab project={project} isQuestionnaireComplete={isQuestionnaireComplete} />;
       case 3:
         return <BuilderInvitationTab project={project} />;
       default:

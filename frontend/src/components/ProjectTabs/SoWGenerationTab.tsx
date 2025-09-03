@@ -13,9 +13,10 @@ import { Project } from '../../services/projectService';
 
 interface SoWGenerationTabProps {
   project: Project;
+  isQuestionnaireComplete?: boolean;
 }
 
-const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({ project }) => {
+const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({ project, isQuestionnaireComplete = false }) => {
   const [generating, setGenerating] = useState(false);
 
   const handleGenerateSoW = async () => {
@@ -27,7 +28,7 @@ const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({ project }) => {
     }, 3000);
   };
 
-  const canGenerateSoW = project.status === 'details_collection' || project.status === 'sow_generation';
+  const canGenerateSoW = isQuestionnaireComplete;
 
   return (
     <Box>
@@ -42,7 +43,7 @@ const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({ project }) => {
           
           {!canGenerateSoW ? (
             <Alert severity="warning" sx={{ mb: 3 }}>
-              Complete the project details collection first to generate your Scope of Work.
+              Complete the project questionnaire first to generate your Scope of Work.
             </Alert>
           ) : (
             <>

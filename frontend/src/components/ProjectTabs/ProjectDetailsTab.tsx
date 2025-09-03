@@ -23,9 +23,10 @@ import QuestionnaireReview from '../Questionnaire/QuestionnaireReview';
 
 interface ProjectDetailsTabProps {
   project: Project;
+  onQuestionnaireComplete?: () => void;
 }
 
-const ProjectDetailsTab: React.FC<ProjectDetailsTabProps> = ({ project }) => {
+const ProjectDetailsTab: React.FC<ProjectDetailsTabProps> = ({ project, onQuestionnaireComplete }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [session, setSession] = useState<QuestionnaireSession | null>(null);
   const [responses, setResponses] = useState<QuestionnaireResponse[]>([]);
@@ -59,6 +60,14 @@ const ProjectDetailsTab: React.FC<ProjectDetailsTabProps> = ({ project }) => {
 
   const handleQuestionnaireComplete = (completedResponses: QuestionnaireResponse[]) => {
     setResponses(completedResponses);
+    // Update session to mark as complete
+    if (session) {
+      setSession({ ...session, isComplete: true, responses: completedResponses });
+    }
+    // Notify parent component
+    if (onQuestionnaireComplete) {
+      onQuestionnaireComplete();
+    }
     setActiveTab(1); // Switch to review tab
   };
 
