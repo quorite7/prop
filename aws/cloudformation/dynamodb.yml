@@ -285,7 +285,8 @@ Resources:
             ProjectionType: ALL
       Tags:
         - Key: Environment
-          Value: !Ref EnvironmentConditions:
+          Value: !Ref Environment
+Conditions:
   IsProduction: !Equals [!Ref Environment, production]
 
 Outputs:
@@ -297,18 +298,3 @@ Outputs:
 
   MainTableArn:
     Description: Main DynamoDB Table ARN
-    Value: !GetAtt MainTable.Arn
-    Export:
-      Name: !Sub '${Environment}-DynamoDB-Table-Arn'
-
-  MainTableStreamArn:
-    Description: Main DynamoDB Table Stream ARN
-    Value: !GetAtt MainTable.StreamArn
-    Export:
-      Name: !Sub '${Environment}-DynamoDB-Stream-Arn'
-
-  BackupVaultArn:
-    Description: Backup Vault ARN
-    Value: !GetAtt BackupVault.BackupVaultArn
-    Export:
-      Name: !Sub '${Environment}-Backup-Vault-Arn'

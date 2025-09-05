@@ -18,9 +18,111 @@ const PROJECTS_TABLE = process.env.PROJECTS_TABLE;
 const BUILDER_ACCESS_TABLE = process.env.BUILDER_ACCESS_TABLE;
 const AUDIT_LOG_TABLE = process.env.AUDIT_LOG_TABLE;
 const QUESTIONNAIRE_TABLE = process.env.QUESTIONNAIRE_TABLE || 'questionnaire-sessions';
+const SOW_TASKS_TABLE = process.env.SOW_TASKS_TABLE || 'sow-tasks';
 
 // Utility functions
 const generateId = () => uuidv4();
+
+// Bedrock SoW generation function
+async function generateSoWWithBedrock(sowId, project, questionnaireSession) {
+    const prompt = `Generate a detailed Scope of Work for a UK home improvement project:
+
+Project Type: ${project.projectType}
+Property Address: ${project.propertyAddress.line1}, ${project.propertyAddress.city}, ${project.propertyAddress.postcode}
+Description: ${project.requirements.description}
+Budget Range: £${project.requirements.budget && project.requirements.budget.min || 0} - £${project.requirements.budget && project.requirements.budget.max || 50000}
+
+Questionnaire Responses: ${JSON.stringify(questionnaireSession.responses)}
+
+Generate a comprehensive SoW with:
+1. Project scope and specifications
+2. Materials list (categorized by builder vs homeowner responsibility)  
+3. Labor requirements and timeline
+4. Cost estimation
+5. UK building standards compliance
+
+Format as JSON with sections: scope, materials, labor, timeline, costs, permits, standards.`;
+
+    const bedrockParams = {
+        modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
+        contentType: 'application/json',
+        accept: 'application/json',
+        body: JSON.stringify({
+            anthropic_version: 'bedrock-2023-05-31',
+            max_tokens: 4000,
+            messages: [{ role: 'user', content: prompt }]
+        })
+    };
+
+    // Update progress
+    await dynamodb.send(new UpdateCommand({
+        TableName: SOW_TASKS_TABLE,
+        Key: { id: sowId },
+        UpdateExpression: 'SET progress = :progress, updatedAt = :updatedAt',
+        ExpressionAttributeValues: {
+            ':progress': 50,
+            ':updatedAt': new Date().toISOString()
+        }
+    }));
+
+    // Call Bedrock
+    const response = await bedrockRuntimeClient.send(new InvokeModelCommand(bedrockParams));
+    const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+    const generatedContent = responseBody.content[0].text;
+
+    // Parse and structure the SoW
+    let sowData;
+    try {
+        sowData = JSON.parse(generatedContent);
+    } catch (e) {
+        sowData = {
+            scope: { description: generatedContent.substring(0, 1000) },
+            materials: { total: project.requirements.budget && project.requirements.budget.max || 25000 },
+            timeline: { totalDuration: 30 },
+            costs: { total: project.requirements.budget && project.requirements.budget.max || 25000 }
+        };
+    }
+
+    const sow = {
+        id: sowId,
+        projectId: project.id,
+        ownerId: project.ownerId,
+        ...sowData,
+        generatedAt: new Date().toISOString(),
+        version: '1.0'
+    };
+
+    // Store SoW
+    await dynamodb.send(new PutCommand({
+        TableName: 'sow-documents',
+        Item: sow
+    }));
+
+    // Update task status
+    await dynamodb.send(new UpdateCommand({
+        TableName: SOW_TASKS_TABLE,
+        Key: { id: sowId },
+        UpdateExpression: 'SET #status = :status, progress = :progress, updatedAt = :updatedAt',
+        ExpressionAttributeNames: { '#status': 'status' },
+        ExpressionAttributeValues: {
+            ':status': 'completed',
+            ':progress': 100,
+            ':updatedAt': new Date().toISOString()
+        }
+    }));
+
+    // Update project status
+    await dynamodb.send(new UpdateCommand({
+        TableName: PROJECTS_TABLE,
+        Key: { id: project.id },
+        UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+        ExpressionAttributeNames: { '#status': 'status' },
+        ExpressionAttributeValues: {
+            ':status': 'sow_ready',
+            ':updatedAt': new Date().toISOString()
+        }
+    }));
+}
 
 // JWT validation and user extraction utilities
 function extractUserFromToken(authHeader) {
@@ -140,6 +242,7 @@ exports.handler = async (event) => {
     console.log('Headers:', JSON.stringify(event.headers, null, 2));
     console.log('Body:', event.body);
     console.log('Query:', JSON.stringify(event.queryStringParameters));
+    console.log('PathParameters:', JSON.stringify(event.pathParameters));
     console.log('========================');
 
     if (event.httpMethod === 'OPTIONS') {
@@ -1951,6 +2054,105 @@ Generate a single, specific question that will help builders provide better quot
                 };
             }
         }
+
+        // Generate SoW - POST /projects/{projectId}/sow/generate
+        console.log('=== CHECKING SOW ENDPOINT ===');
+        console.log('Path:', path);
+        console.log('Method:', method);
+        console.log('SoW Regex Test:', path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/generate$/));
+        console.log('Method Match:', method === "POST");
+        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/generate$/) && method === "POST") {
+            console.log('=== SOW ENDPOINT MATCHED ===');
+            try {
+                const user = requireAuth(event);
+                const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/generate$/);
+                const projectId = pathMatch[1];
+
+                const projectResult = await dynamodb.send(new GetCommand({
+                    TableName: PROJECTS_TABLE,
+                    Key: { id: projectId }
+                }));
+                console.log("=== PROJECT DEBUG ===");
+                console.log("Project ID:", projectId);
+                console.log("User ID:", user.userId);
+                console.log("Project exists:", !!projectResult.Item);
+                console.log("Project owner:", projectResult.Item?.userId);
+                console.log("Owner match:", projectResult.Item?.userId === user.userId);
+
+                if (!projectResult.Item || projectResult.Item.userId !== user.userId) {
+                    return { statusCode: 404, headers, body: JSON.stringify({ error: "Project not found" }) };
+                }
+
+                console.log("=== STARTING QUESTIONNAIRE CHECK ===");
+                const questionnaireResult = await dynamodb.send(new QueryCommand({
+                    TableName: QUESTIONNAIRE_TABLE,
+                    IndexName: "ProjectIdIndex",
+                    KeyConditionExpression: "projectId = :projectId",
+                    ExpressionAttributeValues: { ":projectId": projectId }
+                }));
+
+                if (!questionnaireResult.Items || !questionnaireResult.Items[0] || !questionnaireResult.Items[0].isComplete) {
+                    console.log("Questionnaire not complete:");
+                    return { statusCode: 400, headers, body: JSON.stringify({ error: "Complete questionnaire first" }) };
+                }
+
+                console.log("==== Starting to generate SoW ====")
+
+                const sowId = generateId();
+                console.log("=== SoW ID Generated ===");
+                await dynamodb.send(new PutCommand({
+                    TableName: SOW_TASKS_TABLE,
+                    Item: {
+                        id: sowId,
+                        projectId,
+                        ownerId: user.userId,
+                        status: 'generating',
+                        progress: 0,
+                        createdAt: new Date().toISOString(),
+                        estimatedCompletion: new Date(Date.now() + 30 * 60 * 1000).toISOString()
+                    }
+                }));
+                console.log("=== SoW Task Created ===")
+
+                await dynamodb.send(new UpdateCommand({
+                    TableName: PROJECTS_TABLE,
+                    Key: { id: projectId },
+                    UpdateExpression: "SET #status = :status, sowId = :sowId",
+                    ExpressionAttributeNames: { "#status": "status" },
+                    ExpressionAttributeValues: { ":status": "sow_generation", ":sowId": sowId }
+                }));
+
+                console.log("=== Going to Bedrock now ===");
+
+                setTimeout(() => generateSoWWithBedrock(sowId, projectResult.Item, questionnaireResult.Items[0]), 100);
+
+                return { statusCode: 200, headers, body: JSON.stringify({ sowId, status: "generating" }) };
+            } catch (error) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+            }
+        }
+        // Get SoW Status - GET /projects/{projectId}/sow/{sowId}/status
+        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)\/status$/) && method === "GET") {
+            try {
+                const user = requireAuth(event);
+                const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)\/status$/);
+                const projectId = pathMatch[1];
+                const sowId = pathMatch[2];
+
+                const taskResult = await dynamodb.send(new GetCommand({
+                    TableName: SOW_TASKS_TABLE,
+                    Key: { id: sowId }
+                }));
+
+                if (!taskResult.Item || taskResult.Item.ownerId !== user.userId) {
+                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'SoW task not found' }) };
+                }
+
+                return { statusCode: 200, headers, body: JSON.stringify(taskResult.Item) };
+            } catch (error) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+            }
+        }
         console.log('ERROR: Route not found');
         return {
             statusCode: 404,
@@ -1959,7 +2161,7 @@ Generate a single, specific question that will help builders provide better quot
                 error: 'Not found', 
                 path: path, 
                 method: method,
-                availablePaths: ['/health', '/auth/register', '/auth/login', '/auth/confirm', '/auth/resend-confirmation', '/auth/forgot-password', '/auth/reset-password', '/projects', '/projects/validate-address', '/projects/invite-builder', '/projects/remove-builder', '/projects/access', '/documents/upload-url', '/documents/*/confirm', '/projects/*/documents', '/documents/*']
+                availablePaths: ['/health', '/auth/register', '/auth/login', '/auth/confirm', '/auth/resend-confirmation', '/auth/forgot-password', '/auth/reset-password', '/projects', '/projects/validate-address', '/projects/invite-builder', '/projects/remove-builder', '/projects/access', '/documents/upload-url', '/documents/*/confirm', '/projects/*/documents', '/documents/*', '/projects/*/sow/generate', '/projects/*/sow/*/status', '/projects/*/sow/*']
             })
         };
 

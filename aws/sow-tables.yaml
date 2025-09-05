@@ -1,0 +1,79 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'SoW Generation Tables for UK Home Improvement Platform'
+
+Resources:
+  # SoW Tasks Table - tracks generation progress
+  SoWTasksTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: sow-tasks
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: projectId
+          AttributeType: S
+        - AttributeName: ownerId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: ProjectIdIndex
+          KeySchema:
+            - AttributeName: projectId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: OwnerIdIndex
+          KeySchema:
+            - AttributeName: ownerId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # SoW Documents Table - stores completed SoWs
+  SoWDocumentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: sow-documents
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: projectId
+          AttributeType: S
+        - AttributeName: ownerId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: ProjectIdIndex
+          KeySchema:
+            - AttributeName: projectId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: OwnerIdIndex
+          KeySchema:
+            - AttributeName: ownerId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+Outputs:
+  SoWTasksTableName:
+    Description: 'SoW Tasks Table Name'
+    Value: !Ref SoWTasksTable
+    Export:
+      Name: !Sub '${AWS::StackName}-SoWTasksTable'
+
+  SoWDocumentsTableName:
+    Description: 'SoW Documents Table Name'
+    Value: !Ref SoWDocumentsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-SoWDocumentsTable'
