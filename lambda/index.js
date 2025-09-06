@@ -187,7 +187,7 @@ async function logAccess(userId, action, resource, success, details = {}) {
 async function hasBuilderAccess(builderId, projectId) {
     try {
         const result = await dynamodb.send(new GetCommand({
-            TableName: BUILDER_ACCESS_TABLE,
+            TableName: 'builder-invitations',
             Key: { projectId, builderId }
         }));
         return !!result.Item && result.Item.status === 'active';
@@ -200,7 +200,7 @@ async function hasBuilderAccess(builderId, projectId) {
 async function getBuilderProjects(builderId) {
     try {
         const result = await dynamodb.send(new QueryCommand({
-            TableName: BUILDER_ACCESS_TABLE,
+            TableName: 'builder-invitations',
             IndexName: 'BuilderIdIndex',
             KeyConditionExpression: 'builderId = :builderId',
             FilterExpression: '#status = :status',
@@ -253,6 +253,7 @@ exports.handler = async (event) => {
     try {
         const path = event.path;
         const method = event.httpMethod;
+        const body = event.body;
 
         console.log(`Processing: ${method} ${path}`);
 
@@ -1288,7 +1289,7 @@ exports.handler = async (event) => {
                 
                 // Create builder access record
                 await dynamodb.send(new PutCommand({
-                    TableName: BUILDER_ACCESS_TABLE,
+                    TableName: 'builder-invitations',
                     Item: {
                         projectId,
                         builderId: builderEmail, // Using email as builderId for now
@@ -1332,7 +1333,7 @@ exports.handler = async (event) => {
                 }
                 
                 await dynamodb.send(new DeleteCommand({
-                    TableName: BUILDER_ACCESS_TABLE,
+                    TableName: 'builder-invitations',
                     Key: { projectId, builderId }
                 }));
                 
@@ -1377,7 +1378,7 @@ exports.handler = async (event) => {
                 }
                 
                 const result = await dynamodb.send(new QueryCommand({
-                    TableName: BUILDER_ACCESS_TABLE,
+                    TableName: 'builder-invitations',
                     KeyConditionExpression: 'projectId = :projectId',
                     ExpressionAttributeValues: { ':projectId': projectId }
                 }));
@@ -1399,7 +1400,41 @@ exports.handler = async (event) => {
             }
         }
 
-        // Get individual project (with access control)
+        // Get project invitations - GET /projects/{projectId}/invitations
+        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/) && method === 'GET') {
+            try {
+                const user = requireAuth(event);
+                const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/);
+                const projectId = pathMatch[1];
+                
+                if (user.userType !== 'homeowner' || !(await isProjectOwner(user.userId, projectId))) {
+                    return {
+                        statusCode: 403,
+                        headers,
+                        body: JSON.stringify({ error: 'Access denied' })
+                    };
+                }
+                
+                const result = await dynamodb.send(new QueryCommand({
+                    TableName: 'builder-invitations',
+                    KeyConditionExpression: 'projectId = :projectId',
+                    ExpressionAttributeValues: { ':projectId': projectId }
+                }));
+                
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify(result.Items || [])
+                };
+            } catch (error) {
+                console.error('Get project invitations error:', error);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ error: 'Failed to get project invitations' })
+                };
+            }
+        }        // Get individual project (with access control)
         if (path.match(/^\/(?:prod\/)?projects\/[^\/]+$/) && method === 'GET') {
             try {
                 const user = requireAuth(event);
@@ -2259,6 +2294,388 @@ Return the improved items in the same JSON format with better descriptions, accu
                 }));
 
                 return { statusCode: 200, headers, body: JSON.stringify({ items: processedItems }) };
+            } catch (error) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+            }
+        }
+
+        // Generate builder invitation code - POST /projects/{projectId}/invitations
+        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/) && method === 'POST') {
+            try {
+                const user = requireAuth(event);
+                const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/);
+                const projectId = pathMatch[1];
+                const { builderEmail } = JSON.parse(body);
+
+                if (!await isProjectOwner(user.userId, projectId)) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Access denied' }) };
+                }
+
+                const invitationCode = generateId().substring(0, 8).toUpperCase();
+                const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
+
+                const invitation = {
+                    id: generateId(),
+                    projectId,
+                    invitationCode,
+                    builderEmail,
+                    status: 'pending',
+                    createdAt: new Date().toISOString(),
+                    expiresAt,
+                    createdBy: user.userId
+                };
+
+                await dynamodb.send(new PutCommand({
+                    TableName: 'builder-invitations',
+                    Item: invitation
+                }));
+
+                return { statusCode: 201, headers, body: JSON.stringify({ invitationCode, expiresAt }) };
+            } catch (error) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+            }
+        }
+
+        // Get project invitations - GET /projects/{projectId}/invitations
+        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/) && method === 'GET') {
+            try {
+                const user = requireAuth(event);
+                const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/);
+                const projectId = pathMatch[1];
+
+                if (!await isProjectOwner(user.userId, projectId)) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Access denied' }) };
+                }
+
+                const result = await dynamodb.send(new QueryCommand({
+                    TableName: 'builder-invitations',
+                    IndexName: 'ProjectIdIndex',
+                    KeyConditionExpression: 'projectId = :projectId',
+                    ExpressionAttributeValues: { ':projectId': projectId }
+                }));
+
+                return { statusCode: 200, headers, body: JSON.stringify(result.Items || []) };
+            } catch (error) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+            }
+        }
+
+        // Validate invitation code - POST /invitations/validate
+        if (path.match(/^\/(?:prod\/)?invitations\/validate$/) && method === 'POST') {
+            try {
+                const { invitationCode } = JSON.parse(body);
+
+                const result = await dynamodb.send(new QueryCommand({
+                    TableName: 'builder-invitations',
+                    IndexName: 'InvitationCodeIndex',
+                    KeyConditionExpression: 'invitationCode = :code',
+                    ExpressionAttributeValues: { ':code': invitationCode }
+                }));
+
+                const invitation = result.Items?.[0];
+                if (!invitation || invitation.status !== 'pending' || new Date(invitation.expiresAt) < new Date()) {
+                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'Invalid or expired invitation' }) };
+                }
+
+                const projectResult = await dynamodb.send(new GetCommand({
+                    TableName: PROJECTS_TABLE,
+                    Key: { id: invitation.projectId }
+                }));
+
+                return { 
+                    statusCode: 200, 
+                    headers, 
+                    body: JSON.stringify({ 
+                        valid: true, 
+                        projectId: invitation.projectId,
+                        projectTitle: projectResult.Item?.requirements?.description || 'Home Improvement Project'
+                    }) 
+                };
+            } catch (error) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+            }
+        }
+
+        // Accept invitation (for existing builders) - POST /invitations/accept
+        if (path.match(/^\/(?:prod\/)?invitations\/accept$/) && method === 'POST') {
+            try {
+                const user = requireAuth(event);
+                const { invitationCode } = JSON.parse(body);
+
+                const result = await dynamodb.send(new QueryCommand({
+                    TableName: 'builder-invitations',
+                    IndexName: 'InvitationCodeIndex',
+                    KeyConditionExpression: 'invitationCode = :code',
+                    ExpressionAttributeValues: { ':code': invitationCode }
+                }));
+
+                const invitation = result.Items?.[0];
+                if (!invitation || invitation.status !== 'pending' || new Date(invitation.expiresAt) < new Date()) {
+                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'Invalid or expired invitation' }) };
+                }
+
+                // Grant project access
+                await dynamodb.send(new PutCommand({
+                    TableName: 'project-access',
+                    Item: {
+                        id: generateId(),
+                        projectId: invitation.projectId,
+                        builderId: user.userId,
+                        accessType: 'invited',
+                        grantedAt: new Date().toISOString(),
+                        invitationId: invitation.id
+                    }
+                }));
+
+                // Update invitation status
+                await dynamodb.send(new UpdateCommand({
+                    TableName: 'builder-invitations',
+                    Key: { id: invitation.id },
+                    UpdateExpression: 'SET #status = :status, acceptedAt = :acceptedAt, acceptedBy = :acceptedBy',
+                    ExpressionAttributeNames: { '#status': 'status' },
+                    ExpressionAttributeValues: {
+                        ':status': 'accepted',
+                        ':acceptedAt': new Date().toISOString(),
+                        ':acceptedBy': user.userId
+                    }
+                }));
+
+                return { statusCode: 200, headers, body: JSON.stringify({ success: true, projectId: invitation.projectId }) };
+            } catch (error) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+            }
+        }
+
+        // Get builder project access - GET /builder/projects
+        if (path.match(/^\/(?:prod\/)?builder\/projects$/) && method === 'GET') {
+            try {
+                const user = requireAuth(event);
+
+                const result = await dynamodb.send(new QueryCommand({
+                    TableName: 'project-access',
+                    IndexName: 'BuilderIdIndex',
+                    KeyConditionExpression: 'builderId = :builderId',
+                    ExpressionAttributeValues: { ':builderId': user.userId }
+                }));
+
+                const projectIds = result.Items?.map(item => item.projectId) || [];
+                const projects = [];
+
+                for (const projectId of projectIds) {
+                    const projectResult = await dynamodb.send(new GetCommand({
+                        TableName: PROJECTS_TABLE,
+                        Key: { id: projectId }
+                    }));
+                    if (projectResult.Item) {
+                        projects.push(projectResult.Item);
+                    }
+                }
+
+                return { statusCode: 200, headers, body: JSON.stringify(projects) };
+            } catch (error) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+            }
+        }
+
+        // Get project for builder - GET /builder/projects/{projectId}
+        if (path.match(/^\/(?:prod\/)?builder\/projects\/([^\/]+)$/) && method === 'GET') {
+            try {
+                const user = requireAuth(event);
+                const pathMatch = path.match(/^\/(?:prod\/)?builder\/projects\/([^\/]+)$/);
+                const projectId = pathMatch[1];
+
+                // Check builder access
+                const accessResult = await dynamodb.send(new QueryCommand({
+                    TableName: 'project-access',
+                    IndexName: 'ProjectBuilderIndex',
+                    KeyConditionExpression: 'projectId = :projectId AND builderId = :builderId',
+                    ExpressionAttributeValues: { 
+                        ':projectId': projectId,
+                        ':builderId': user.userId 
+                    }
+                }));
+
+                if (!accessResult.Items?.length) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Access denied' }) };
+                }
+
+                const projectResult = await dynamodb.send(new GetCommand({
+                    TableName: PROJECTS_TABLE,
+                    Key: { id: projectId }
+                }));
+
+                if (!projectResult.Item) {
+                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'Project not found' }) };
+                }
+
+                // Get SoW if available
+                const sowResult = await dynamodb.send(new QueryCommand({
+                    TableName: 'sow-documents',
+                    IndexName: 'ProjectIdIndex',
+                    KeyConditionExpression: 'projectId = :projectId',
+                    ExpressionAttributeValues: { ':projectId': projectId }
+                }));
+
+                return { 
+                    statusCode: 200, 
+                    headers, 
+                    body: JSON.stringify({ 
+                        project: projectResult.Item,
+                        sow: sowResult.Items?.[0] || null
+                    }) 
+                };
+            } catch (error) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+            }
+        }
+
+        // Submit quote - POST /builder/projects/{projectId}/quotes
+        if (path.match(/^\/(?:prod\/)?builder\/projects\/([^\/]+)\/quotes$/) && method === 'POST') {
+            try {
+                const user = requireAuth(event);
+                const pathMatch = path.match(/^\/(?:prod\/)?builder\/projects\/([^\/]+)\/quotes$/);
+                const projectId = pathMatch[1];
+                const quoteData = JSON.parse(body);
+
+                // Check builder access
+                const accessResult = await dynamodb.send(new QueryCommand({
+                    TableName: 'project-access',
+                    IndexName: 'ProjectBuilderIndex',
+                    KeyConditionExpression: 'projectId = :projectId AND builderId = :builderId',
+                    ExpressionAttributeValues: { 
+                        ':projectId': projectId,
+                        ':builderId': user.userId 
+                    }
+                }));
+
+                if (!accessResult.Items?.length) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Access denied' }) };
+                }
+
+                const quote = {
+                    id: generateId(),
+                    projectId,
+                    builderId: user.userId,
+                    ...quoteData,
+                    status: 'submitted',
+                    submittedAt: new Date().toISOString()
+                };
+
+                await dynamodb.send(new PutCommand({
+                    TableName: 'project-quotes',
+                    Item: quote
+                }));
+
+                return { statusCode: 201, headers, body: JSON.stringify(quote) };
+            } catch (error) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+            }
+        }
+
+        // Get project quotes (for project owner) - GET /projects/{projectId}/quotes
+        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/quotes$/) && method === 'GET') {
+            try {
+                const user = requireAuth(event);
+                const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/quotes$/);
+                const projectId = pathMatch[1];
+
+                if (!await isProjectOwner(user.userId, projectId)) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Access denied' }) };
+                }
+
+                const result = await dynamodb.send(new QueryCommand({
+                    TableName: 'project-quotes',
+                    IndexName: 'ProjectIdIndex',
+                    KeyConditionExpression: 'projectId = :projectId',
+                    ExpressionAttributeValues: { ':projectId': projectId }
+                }));
+
+                return { statusCode: 200, headers, body: JSON.stringify(result.Items || []) };
+            } catch (error) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+            }
+        }
+
+        // Generate builder invitation code - POST /projects/{projectId}/invitations
+        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/) && method === 'POST') {
+            try {
+                const user = requireAuth(event);
+                const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/);
+                const projectId = pathMatch[1];
+                const { builderEmail } = JSON.parse(body);
+
+                if (!await isProjectOwner(user.userId, projectId)) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Access denied' }) };
+                }
+
+                const invitationCode = generateId().substring(0, 8).toUpperCase();
+                const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
+
+                const invitation = {
+                    id: generateId(),
+                    projectId,
+                    invitationCode,
+                    builderEmail,
+                    status: 'pending',
+                    createdAt: new Date().toISOString(),
+                    expiresAt,
+                    createdBy: user.userId
+                };
+
+                await dynamodb.send(new PutCommand({
+                    TableName: 'builder-invitations',
+                    Item: invitation
+                }));
+
+                return { statusCode: 201, headers, body: JSON.stringify({ invitationCode, expiresAt }) };
+            } catch (error) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+            }
+        }
+
+        // Get project invitations - GET /projects/{projectId}/invitations
+        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/) && method === 'GET') {
+            try {
+                const user = requireAuth(event);
+                const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/);
+                const projectId = pathMatch[1];
+
+                if (!await isProjectOwner(user.userId, projectId)) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Access denied' }) };
+                }
+
+                const result = await dynamodb.send(new QueryCommand({
+                    TableName: 'builder-invitations',
+                    IndexName: 'ProjectIdIndex',
+                    KeyConditionExpression: 'projectId = :projectId',
+                    ExpressionAttributeValues: { ':projectId': projectId }
+                }));
+
+                return { statusCode: 200, headers, body: JSON.stringify(result.Items || []) };
+            } catch (error) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+            }
+        }
+
+        // Get project quotes (for project owner) - GET /projects/{projectId}/quotes
+        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/quotes$/) && method === 'GET') {
+            try {
+                const user = requireAuth(event);
+                const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/quotes$/);
+                const projectId = pathMatch[1];
+
+                if (!await isProjectOwner(user.userId, projectId)) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Access denied' }) };
+                }
+
+                const result = await dynamodb.send(new QueryCommand({
+                    TableName: 'project-quotes',
+                    IndexName: 'ProjectIdIndex',
+                    KeyConditionExpression: 'projectId = :projectId',
+                    ExpressionAttributeValues: { ':projectId': projectId }
+                }));
+
+                return { statusCode: 200, headers, body: JSON.stringify(result.Items || []) };
             } catch (error) {
                 return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
             }

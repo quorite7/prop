@@ -1,0 +1,138 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'DynamoDB tables for builder invitation system'
+
+Resources:
+  # Builder Invitations Table
+  BuilderInvitationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: builder-invitations
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: projectId
+          AttributeType: S
+        - AttributeName: invitationCode
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: ProjectIdIndex
+          KeySchema:
+            - AttributeName: projectId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: InvitationCodeIndex
+          KeySchema:
+            - AttributeName: invitationCode
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Environment
+          Value: production
+        - Key: Application
+          Value: uk-home-improvement
+
+  # Project Access Table
+  ProjectAccessTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: project-access
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: projectId
+          AttributeType: S
+        - AttributeName: builderId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: ProjectIdIndex
+          KeySchema:
+            - AttributeName: projectId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: BuilderIdIndex
+          KeySchema:
+            - AttributeName: builderId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: ProjectBuilderIndex
+          KeySchema:
+            - AttributeName: projectId
+              KeyType: HASH
+            - AttributeName: builderId
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Environment
+          Value: production
+        - Key: Application
+          Value: uk-home-improvement
+
+  # Project Quotes Table
+  ProjectQuotesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: project-quotes
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: projectId
+          AttributeType: S
+        - AttributeName: builderId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: ProjectIdIndex
+          KeySchema:
+            - AttributeName: projectId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: BuilderIdIndex
+          KeySchema:
+            - AttributeName: builderId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Environment
+          Value: production
+        - Key: Application
+          Value: uk-home-improvement
+
+Outputs:
+  BuilderInvitationsTableName:
+    Description: 'Name of the Builder Invitations table'
+    Value: !Ref BuilderInvitationsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-BuilderInvitationsTable'
+
+  ProjectAccessTableName:
+    Description: 'Name of the Project Access table'
+    Value: !Ref ProjectAccessTable
+    Export:
+      Name: !Sub '${AWS::StackName}-ProjectAccessTable'
+
+  ProjectQuotesTableName:
+    Description: 'Name of the Project Quotes table'
+    Value: !Ref ProjectQuotesTable
+    Export:
+      Name: !Sub '${AWS::StackName}-ProjectQuotesTable'

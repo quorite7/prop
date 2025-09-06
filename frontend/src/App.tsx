@@ -16,6 +16,8 @@ import ConfirmRegistrationPage from './pages/ConfirmRegistrationPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import BuilderDashboardPage from './pages/BuilderDashboardPage';
+import BuilderDashboardPageNew from './pages/BuilderDashboardPageNew';
+import BuilderProjectViewPage from './pages/BuilderProjectViewPage';
 import ProfilePage from './pages/ProfilePage';
 import SoWReviewPage from './pages/SoWReviewPage';
 import QuoteSubmissionPage from './pages/QuoteSubmissionPage';
@@ -78,15 +80,33 @@ function App() {
                 } 
               />
               
-              {/* Builder Routes */}
+              {/* Builder Routes - New Invitation System */}
               <Route 
                 path="builder/dashboard" 
                 element={
                   <ProtectedRoute>
-                    <BuilderDashboardPage />
+                    <BuilderDashboardPageNew />
                   </ProtectedRoute>
                 } 
               />
+              <Route 
+                path="builder/projects/:projectId" 
+                element={
+                  <ProtectedRoute>
+                    <BuilderProjectViewPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="builder/projects/:projectId/quote" 
+                element={
+                  <ProtectedRoute>
+                    <BuilderProjectViewPage />
+                  </ProtectedRoute>
+                } 
+              />
+              
+              {/* Legacy Builder Routes */}
               <Route 
                 path="builder/sow/:sowId" 
                 element={

@@ -18,6 +18,7 @@ import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { useAuth } from '../contexts/AuthContext';
+import { builderInvitationService } from '../services/builderInvitationService';
 import { Email, Refresh } from '@mui/icons-material';
 
 const schema = yup.object({
@@ -34,16 +35,17 @@ interface ConfirmFormData {
 const ConfirmRegistrationPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { confirmRegistration, resendConfirmationCode } = useAuth();
+  const { confirmRegistration, resendConfirmationCode, login } = useAuth();
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
 
-  // Get email from navigation state or redirect to register
+  // Get data from navigation state
   const email = location.state?.email;
-  // const userType = location.state?.userType || 'homeowner';
+  const userType = location.state?.userType || 'homeowner';
+  const invitationCode = location.state?.invitationCode;
 
   useEffect(() => {
     if (!email) {
@@ -77,17 +79,47 @@ const ConfirmRegistrationPage: React.FC = () => {
 
     try {
       await confirmRegistration(email, data.confirmationCode);
-      setSuccess('Email verified successfully! You can now sign in.');
+      setSuccess('Email verified successfully!');
       
-      // Redirect to login after 2 seconds
-      setTimeout(() => {
-        navigate('/login', { 
-          state: { 
-            email, 
-            message: 'Registration confirmed! Please sign in with your credentials.' 
-          } 
-        });
-      }, 2000);
+      // For builders with invitation codes, auto-login and accept invitation
+      if (userType === 'builder' && invitationCode) {
+        try {
+          // Auto-login (this is a simplified approach - in production you might want to handle this differently)
+          setTimeout(async () => {
+            try {
+              // Accept the invitation
+              await builderInvitationService.acceptInvitation(invitationCode);
+              navigate('/app/builder/dashboard');
+            } catch (inviteErr) {
+              console.error('Failed to accept invitation:', inviteErr);
+              navigate('/login', { 
+                state: { 
+                  email, 
+                  message: 'Registration confirmed! Please sign in and use your invitation code from the dashboard.' 
+                } 
+              });
+            }
+          }, 2000);
+        } catch (loginErr) {
+          console.error('Auto-login failed:', loginErr);
+          navigate('/login', { 
+            state: { 
+              email, 
+              message: 'Registration confirmed! Please sign in to access your invited project.' 
+            } 
+          });
+        }
+      } else {
+        // Regular homeowner flow
+        setTimeout(() => {
+          navigate('/login', { 
+            state: { 
+              email, 
+              message: 'Registration confirmed! Please sign in with your credentials.' 
+            } 
+          });
+        }, 2000);
+      }
     } catch (err: any) {
       setError(err.response?.data?.error?.message || err.message || 'Verification failed. Please try again.');
     } finally {
@@ -133,6 +165,12 @@ const ConfirmRegistrationPage: React.FC = () => {
             <Typography variant="body1" sx={{ fontWeight: 600, color: 'primary.main' }}>
               {email}
             </Typography>
+            
+            {userType === 'builder' && invitationCode && (
+              <Alert severity="info" sx={{ mt: 2 }}>
+                After verification, you'll automatically get access to your invited project.
+              </Alert>
+            )}
           </Box>
 
           {error && (
@@ -144,6 +182,11 @@ const ConfirmRegistrationPage: React.FC = () => {
           {success && (
             <Alert severity="success" sx={{ mb: 3 }}>
               {success}
+              {userType === 'builder' && invitationCode && (
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  Redirecting to your builder dashboard...
+                </Typography>
+              )}
             </Alert>
           )}
 
