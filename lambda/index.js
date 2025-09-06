@@ -2185,7 +2185,86 @@ Generate a single, specific question that will help builders provide better quot
             } catch (error) {
                 return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
             }
-        }        console.log('ERROR: Route not found');
+        }
+
+        // Update SoW - PUT /projects/{projectId}/sow/{sowId}
+        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)$/) && method === "PUT") {
+            try {
+                const pathParts = path.split('/');
+                const projectId = pathParts[pathParts.length - 3];
+                const sowId = pathParts[pathParts.length - 1];
+                const { items } = JSON.parse(body);
+
+                await dynamodb.send(new UpdateCommand({
+                    TableName: 'sow-documents',
+                    Key: { id: sowId },
+                    UpdateExpression: 'SET items = :items, updatedAt = :updatedAt',
+                    ExpressionAttributeValues: {
+                        ':items': items,
+                        ':updatedAt': new Date().toISOString()
+                    }
+                }));
+
+                return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
+            } catch (error) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+            }
+        }
+
+        // Process SoW with AI - POST /projects/{projectId}/sow/{sowId}/process
+        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)\/process$/) && method === "POST") {
+            try {
+                const pathParts = path.split('/');
+                const projectId = pathParts[pathParts.length - 4];
+                const sowId = pathParts[pathParts.length - 2];
+                const { items } = JSON.parse(body);
+
+                const prompt = `Review and improve this Scope of Work items for a UK home improvement project. Fix any issues, improve clarity, and ensure completeness:
+
+${JSON.stringify(items, null, 2)}
+
+Return the improved items in the same JSON format with better descriptions, accurate costs, and proper sequencing.`;
+
+                const bedrockParams = {
+                    modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
+                    contentType: 'application/json',
+                    accept: 'application/json',
+                    body: JSON.stringify({
+                        anthropic_version: 'bedrock-2023-05-31',
+                        max_tokens: 4000,
+                        messages: [{ role: 'user', content: prompt }]
+                    })
+                };
+
+                const response = await bedrockRuntimeClient.send(new InvokeModelCommand(bedrockParams));
+                const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+                const processedContent = responseBody.content[0].text;
+
+                let processedItems;
+                try {
+                    processedItems = JSON.parse(processedContent);
+                } catch (e) {
+                    processedItems = items;
+                }
+
+                await dynamodb.send(new UpdateCommand({
+                    TableName: 'sow-documents',
+                    Key: { id: sowId },
+                    UpdateExpression: 'SET items = :items, updatedAt = :updatedAt, processedAt = :processedAt',
+                    ExpressionAttributeValues: {
+                        ':items': processedItems,
+                        ':updatedAt': new Date().toISOString(),
+                        ':processedAt': new Date().toISOString()
+                    }
+                }));
+
+                return { statusCode: 200, headers, body: JSON.stringify({ items: processedItems }) };
+            } catch (error) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+            }
+        }
+
+        console.log('ERROR: Route not found');
         return {
             statusCode: 404,
             headers,
@@ -2193,7 +2272,7 @@ Generate a single, specific question that will help builders provide better quot
                 error: 'Not found', 
                 path: path, 
                 method: method,
-                availablePaths: ['/health', '/auth/register', '/auth/login', '/auth/confirm', '/auth/resend-confirmation', '/auth/forgot-password', '/auth/reset-password', '/projects', '/projects/validate-address', '/projects/invite-builder', '/projects/remove-builder', '/projects/access', '/documents/upload-url', '/documents/*/confirm', '/projects/*/documents', '/documents/*', '/projects/*/sow/generate', '/projects/*/sow/*/status', '/projects/*/sow/*']
+                availablePaths: ['/health', '/auth/register', '/auth/login', '/auth/confirm', '/auth/resend-confirmation', '/auth/forgot-password', '/auth/reset-password', '/projects', '/projects/validate-address', '/projects/invite-builder', '/projects/remove-builder', '/projects/access', '/documents/upload-url', '/documents/*/confirm', '/projects/*/documents', '/documents/*', '/projects/*/sow/generate', '/projects/*/sow/*/status', '/projects/*/sow/*', '/projects/*/sow/*/process']
             })
         };
 

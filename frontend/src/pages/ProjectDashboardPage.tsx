@@ -244,7 +244,11 @@ const ProjectDashboardPage: React.FC = () => {
       case 1:
         return <ProjectDetailsTab project={project} onQuestionnaireComplete={refreshQuestionnaireStatus} />;
       case 2:
-        return <SoWGenerationTab project={project} isQuestionnaireComplete={isQuestionnaireComplete} />;
+        return <SoWGenerationTab 
+          project={project} 
+          isQuestionnaireComplete={isQuestionnaireComplete}
+          onMoveToBuilderInvitation={() => setActiveTab(3)}
+        />;
       case 3:
         return <BuilderInvitationTab project={project} />;
       default:

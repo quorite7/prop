@@ -14,19 +14,26 @@ import { Description as DescriptionIcon } from '@mui/icons-material';
 import { Project } from '../../services/projectService';
 import { apiService } from '../../services/api';
 import { sowService, ScopeOfWork } from '../../services/sowService';
+import SoWEditor from '../SoWEditor';
 
 interface SoWGenerationTabProps {
   project: Project;
   isQuestionnaireComplete?: boolean;
+  onMoveToBuilderInvitation?: () => void;
 }
 
-const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({ project, isQuestionnaireComplete = false }) => {
+const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({ 
+  project, 
+  isQuestionnaireComplete = false,
+  onMoveToBuilderInvitation 
+}) => {
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [sowId, setSowId] = useState<string | null>(project.sowId || null);
   const [error, setError] = useState<string>('');
   const [sow, setSow] = useState<ScopeOfWork | null>(null);
   const [loadingSow, setLoadingSow] = useState(false);
+  const [editMode, setEditMode] = useState(false);
 
   useEffect(() => {
     if (project.status === 'sow_ready' && sowId) {
@@ -87,6 +94,13 @@ const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({ project, isQuestion
     } catch (err: any) {
       setGenerating(false);
       setError(err.message || 'Failed to start SoW generation');
+    }
+  };
+
+  const handleCompleteSoW = () => {
+    setEditMode(false);
+    if (onMoveToBuilderInvitation) {
+      onMoveToBuilderInvitation();
     }
   };
 
@@ -155,27 +169,46 @@ const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({ project, isQuestion
         </CardContent>
       </Card>
       
-      {project.status === 'sow_ready' && (
+      {project.status === 'sow_ready' && sowId && (
         <Card sx={{ mt: 3 }}>
           <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Generated Scope of Work
-            </Typography>
-            
-            {loadingSow ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-                <CircularProgress />
-              </Box>
-            ) : sow ? (
-              <Box>
-                <Typography variant="body2" component="pre" sx={{ whiteSpace: 'pre-wrap', fontSize: '12px', backgroundColor: '#f5f5f5', p: 2, borderRadius: 1 }}>
-                  {JSON.stringify(sow, null, 2)}
-                </Typography>
-              </Box>
+            {editMode ? (
+              <SoWEditor
+                projectId={project.id}
+                sowId={sowId}
+                onComplete={handleCompleteSoW}
+              />
             ) : (
-              <Typography color="text.secondary">
-                Failed to load SoW details
-              </Typography>
+              <>
+                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                  <Typography variant="h6">
+                    Generated Scope of Work
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    onClick={() => setEditMode(true)}
+                    startIcon={<DescriptionIcon />}
+                  >
+                    Edit SoW
+                  </Button>
+                </Box>
+                
+                {loadingSow ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : sow ? (
+                  <Box>
+                    <Typography variant="body2" component="pre" sx={{ whiteSpace: 'pre-wrap', fontSize: '12px', backgroundColor: '#f5f5f5', p: 2, borderRadius: 1 }}>
+                      {JSON.stringify(sow, null, 2)}
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Typography color="text.secondary">
+                    Failed to load SoW details
+                  </Typography>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
