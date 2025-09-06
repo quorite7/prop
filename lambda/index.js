@@ -2153,7 +2153,39 @@ Generate a single, specific question that will help builders provide better quot
                 return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
             }
         }
-        console.log('ERROR: Route not found');
+        // Get SoW Document - GET /projects/{projectId}/sow/{sowId}
+        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)$/) && method === "GET") {
+            try {
+                const user = requireAuth(event);
+                const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)$/);
+                const projectId = pathMatch[1];
+                const sowId = pathMatch[2];
+
+                // First check if user owns the project
+                const projectResult = await dynamodb.send(new GetCommand({
+                    TableName: PROJECTS_TABLE,
+                    Key: { id: projectId }
+                }));
+
+                if (!projectResult.Item || projectResult.Item.userId !== user.userId) {
+                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'Project not found' }) };
+                }
+
+                // Then get the SoW document
+                const sowResult = await dynamodb.send(new GetCommand({
+                    TableName: 'sow-documents',
+                    Key: { id: sowId }
+                }));
+
+                if (!sowResult.Item || sowResult.Item.projectId !== projectId) {
+                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'SoW not found' }) };
+                }
+
+                return { statusCode: 200, headers, body: JSON.stringify(sowResult.Item) };
+            } catch (error) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+            }
+        }        console.log('ERROR: Route not found');
         return {
             statusCode: 404,
             headers,

@@ -8,10 +8,12 @@ import {
   Alert,
   CircularProgress,
   LinearProgress,
+  Grid,
 } from '@mui/material';
 import { Description as DescriptionIcon } from '@mui/icons-material';
 import { Project } from '../../services/projectService';
 import { apiService } from '../../services/api';
+import { sowService, ScopeOfWork } from '../../services/sowService';
 
 interface SoWGenerationTabProps {
   project: Project;
@@ -23,6 +25,28 @@ const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({ project, isQuestion
   const [progress, setProgress] = useState(0);
   const [sowId, setSowId] = useState<string | null>(project.sowId || null);
   const [error, setError] = useState<string>('');
+  const [sow, setSow] = useState<ScopeOfWork | null>(null);
+  const [loadingSow, setLoadingSow] = useState(false);
+
+  useEffect(() => {
+    if (project.status === 'sow_ready' && sowId) {
+      loadSoW();
+    }
+  }, [project.status, sowId]);
+
+  const loadSoW = async () => {
+    if (!sowId) return;
+    try {
+      setLoadingSow(true);
+      const sowData = await sowService.getSoW(project.id, sowId);
+      setSow(sowData);
+    } catch (error) {
+      console.error('Failed to load SoW:', error);
+      setError('Failed to load SoW: ' + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setLoadingSow(false);
+    }
+  };
 
   const handleGenerateSoW = async () => {
     try {
@@ -41,7 +65,7 @@ const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({ project, isQuestion
           if (statusResponse.status === 'completed') {
             clearInterval(pollInterval);
             setGenerating(false);
-            window.location.reload();
+            loadSoW();
           } else if (statusResponse.status === 'failed') {
             clearInterval(pollInterval);
             setGenerating(false);
@@ -58,7 +82,7 @@ const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({ project, isQuestion
           setGenerating(false);
           setError('Generation timed out. Please try again.');
         }
-      }, 35 * 60 * 1000);
+      }, 60 * 1000);
       
     } catch (err: any) {
       setGenerating(false);
@@ -85,7 +109,7 @@ const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({ project, isQuestion
             </Alert>
           ) : project.status === 'sow_ready' ? (
             <Alert severity="success" sx={{ mb: 3 }}>
-              Your Scope of Work is ready! View it in the project overview.
+              Your Scope of Work is ready!
             </Alert>
           ) : (
             <>
@@ -112,7 +136,7 @@ const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({ project, isQuestion
               </Typography>
               <LinearProgress variant="determinate" value={progress} />
               <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                This process takes approximately 30 minutes
+                This process takes approximately 2 minutes
               </Typography>
             </Box>
           )}
@@ -130,6 +154,32 @@ const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({ project, isQuestion
           </Button>
         </CardContent>
       </Card>
+      
+      {project.status === 'sow_ready' && (
+        <Card sx={{ mt: 3 }}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>
+              Generated Scope of Work
+            </Typography>
+            
+            {loadingSow ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                <CircularProgress />
+              </Box>
+            ) : sow ? (
+              <Box>
+                <Typography variant="body2" component="pre" sx={{ whiteSpace: 'pre-wrap', fontSize: '12px', backgroundColor: '#f5f5f5', p: 2, borderRadius: 1 }}>
+                  {JSON.stringify(sow, null, 2)}
+                </Typography>
+              </Box>
+            ) : (
+              <Typography color="text.secondary">
+                Failed to load SoW details
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </Box>
   );
 };
