@@ -1019,7 +1019,41 @@ exports.handler = async (event) => {
                 body: JSON.stringify(projectTypes)
             };
         }
+        // Validate invitation code - POST /invitations/validate (public endpoint)
+        if (path.match(/^\/(?:prod\/)?invitations\/validate$/) && method === 'POST') {
+            try {
+                const { invitationCode } = JSON.parse(body);
 
+                const result = await dynamodb.send(new QueryCommand({
+                    TableName: 'builder-invitations',
+                    IndexName: 'InvitationCodeIndex',
+                    KeyConditionExpression: 'invitationCode = :code',
+                    ExpressionAttributeValues: { ':code': invitationCode }
+                }));
+
+                const invitation = result.Items?.[0];
+                if (!invitation || invitation.status !== 'pending' || new Date(invitation.expiresAt) < new Date()) {
+                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'Invalid or expired invitation' }) };
+                }
+
+                const projectResult = await dynamodb.send(new GetCommand({
+                    TableName: PROJECTS_TABLE,
+                    Key: { id: invitation.projectId }
+                }));
+
+                return { 
+                    statusCode: 200, 
+                    headers, 
+                    body: JSON.stringify({ 
+                        valid: true, 
+                        projectId: invitation.projectId,
+                        projectTitle: projectResult.Item?.requirements?.description || 'Home Improvement Project'
+                    }) 
+                };
+            } catch (error) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+            }
+        }
         // Protected endpoints (require authentication)
         const authHeader = event.headers.Authorization || event.headers.authorization;
         if (!authHeader) {
@@ -1036,6 +1070,8 @@ exports.handler = async (event) => {
                 })
             };
         }
+
+
 
         // Extract and validate JWT token
         const token = authHeader.replace('Bearer ', '');
@@ -2360,41 +2396,6 @@ Return the improved items in the same JSON format with better descriptions, accu
             }
         }
 
-        // Validate invitation code - POST /invitations/validate
-        if (path.match(/^\/(?:prod\/)?invitations\/validate$/) && method === 'POST') {
-            try {
-                const { invitationCode } = JSON.parse(body);
-
-                const result = await dynamodb.send(new QueryCommand({
-                    TableName: 'builder-invitations',
-                    IndexName: 'InvitationCodeIndex',
-                    KeyConditionExpression: 'invitationCode = :code',
-                    ExpressionAttributeValues: { ':code': invitationCode }
-                }));
-
-                const invitation = result.Items?.[0];
-                if (!invitation || invitation.status !== 'pending' || new Date(invitation.expiresAt) < new Date()) {
-                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'Invalid or expired invitation' }) };
-                }
-
-                const projectResult = await dynamodb.send(new GetCommand({
-                    TableName: PROJECTS_TABLE,
-                    Key: { id: invitation.projectId }
-                }));
-
-                return { 
-                    statusCode: 200, 
-                    headers, 
-                    body: JSON.stringify({ 
-                        valid: true, 
-                        projectId: invitation.projectId,
-                        projectTitle: projectResult.Item?.requirements?.description || 'Home Improvement Project'
-                    }) 
-                };
-            } catch (error) {
-                return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
-            }
-        }
 
         // Accept invitation (for existing builders) - POST /invitations/accept
         if (path.match(/^\/(?:prod\/)?invitations\/accept$/) && method === 'POST') {
