@@ -222,7 +222,7 @@ class AuthService {
       const user: User = {
         id: payload.email || payload.sub,
         email: payload.email,
-        userType: payload['custom:userType'] || 'homeowner',
+        userType: payload['custom:user_type'] || 'homeowner',
         profile: {
           firstName: payload.given_name || '',
           lastName: payload.family_name || '',
