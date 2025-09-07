@@ -1453,6 +1453,7 @@ exports.handler = async (event) => {
                 
                 const result = await dynamodb.send(new QueryCommand({
                     TableName: 'builder-invitations',
+                    IndexName: 'ProjectIdIndex',
                     KeyConditionExpression: 'projectId = :projectId',
                     ExpressionAttributeValues: { ':projectId': projectId }
                 }));
