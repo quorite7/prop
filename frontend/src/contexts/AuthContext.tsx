@@ -6,7 +6,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (userData: RegisterData) => Promise<{ needsConfirmation: boolean }>;
-  confirmRegistration: (email: string, code: string) => Promise<void>;
+  confirmRegistration: (email: string, code: string, invitationCode?: string) => Promise<void>;
   resendConfirmationCode: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
@@ -85,10 +85,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const confirmRegistration = async (email: string, code: string) => {
+  const confirmRegistration = async (email: string, code: string, invitationCode?: string) => {
     try {
       setLoading(true);
-      await authService.confirmRegistration(email, code);
+      await authService.confirmRegistration(email, code, invitationCode);
       // After confirmation, user needs to login
     } catch (error) {
       throw error;

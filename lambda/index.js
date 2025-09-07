@@ -125,6 +125,23 @@ Format as JSON with sections: scope, materials, labor, timeline, costs, permits,
 }
 
 // JWT validation and user extraction utilities
+// Get user attributes from Cognito
+async function getUserTypeFromCognito(userId) {
+    try {
+        const { AdminGetUserCommand } = require('@aws-sdk/client-cognito-identity-provider');
+        const result = await cognito.send(new AdminGetUserCommand({
+            UserPoolId: process.env.USER_POOL_ID,
+            Username: userId
+        }));
+        
+        const userTypeAttr = result.UserAttributes?.find(attr => attr.Name === 'custom:user_type');
+        return userTypeAttr?.Value || 'homeowner';
+    } catch (error) {
+        console.error('Error getting user type from Cognito:', error);
+        return 'homeowner'; // Default fallback
+    }
+}
+
 function extractUserFromToken(authHeader) {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         throw new Error('Missing or invalid Authorization header');
@@ -145,8 +162,10 @@ function extractUserFromToken(authHeader) {
             sub: payload.sub,
             userId: payload.sub,
             email: payload.email,
-            userType: payload['custom:user_type'] || payload['custom:userType'] || 'homeowner',
-            username: payload['cognito:username'] || payload.username
+            userType: payload['custom:user_type'] || 'homeowner',
+            username: payload['cognito:username'] || payload.username,
+            firstName: payload.given_name || '',
+            lastName: payload.family_name || ''
         };
     } catch (error) {
         console.error('JWT decode error:', error);
@@ -154,12 +173,12 @@ function extractUserFromToken(authHeader) {
     }
 }
 
-function requireAuth(event) {
+async function requireAuth(event) {
     const authHeader = event.headers.Authorization || event.headers.authorization;
     if (!authHeader) {
         throw new Error('Authorization header required');
     }
-    return extractUserFromToken(authHeader);
+    return await extractUserFromToken(authHeader);
 }
 
 // Audit logging
@@ -427,7 +446,7 @@ exports.handler = async (event) => {
                         data: {
                             user: {
                                 email: email,
-                                userType: 'homeowner', // Default, could be enhanced later
+                                userType: extractUserFromToken(`Bearer ${result.AuthenticationResult.IdToken}`).userType,
                                 profile: {
                                     firstName: '',
                                     lastName: '',
@@ -506,6 +525,77 @@ exports.handler = async (event) => {
 
                 await cognito.send(confirmCommand);
                 console.log('Email confirmed successfully');
+
+                // If invitation code is provided, assign project to builder
+                if (requestData.invitationCode) {
+                    console.log('Processing invitation code:', requestData.invitationCode);
+                    
+                    try {
+                        // Find the invitation
+                        const invitationResult = await dynamodb.send(new QueryCommand({
+                            TableName: 'builder-invitations',
+                            IndexName: 'InvitationCodeIndex',
+                            KeyConditionExpression: 'invitationCode = :code',
+                            ExpressionAttributeValues: { ':code': requestData.invitationCode }
+                        }));
+
+                        const invitation = invitationResult.Items?.[0];
+                        if (invitation && invitation.status === 'pending' && new Date(invitation.expiresAt) > new Date()) {
+                            console.log('Valid invitation found, assigning project access');
+                            
+                            // Create builder access record
+                            const accessRecord = {
+                                id: generateId(),
+                                projectId: invitation.projectId,
+                                builderEmail: email,
+                                invitationId: invitation.id,
+                                createdAt: new Date().toISOString(),
+                                status: 'active'
+                            };
+
+                            await dynamodb.send(new PutCommand({
+                                TableName: 'uk-home-builder-access',
+                                Item: accessRecord
+                            }));
+
+                            // Update invitation status
+                            await dynamodb.send(new UpdateCommand({
+                                TableName: 'builder-invitations',
+                                Key: { id: invitation.id },
+                                UpdateExpression: 'SET #status = :status, acceptedAt = :acceptedAt, acceptedBy = :acceptedBy',
+                                ExpressionAttributeNames: { '#status': 'status' },
+                                ExpressionAttributeValues: {
+                                    ':status': 'accepted',
+                                    ':acceptedAt': new Date().toISOString(),
+                                    ':acceptedBy': email
+                                }
+                            }));
+
+                            // Log the assignment
+                            await dynamodb.send(new PutCommand({
+                                TableName: 'uk-home-audit-log',
+                                Item: {
+                                    id: generateId(),
+                                    projectId: invitation.projectId,
+                                    action: 'BUILDER_INVITATION_ACCEPTED',
+                                    details: {
+                                        builderEmail: email,
+                                        invitationCode: requestData.invitationCode,
+                                        acceptedVia: 'email_confirmation'
+                                    },
+                                    timestamp: new Date().toISOString()
+                                }
+                            }));
+
+                            console.log('Project access assigned successfully');
+                        } else {
+                            console.log('Invalid or expired invitation code');
+                        }
+                    } catch (inviteError) {
+                        console.error('Failed to process invitation:', inviteError);
+                        // Don't fail the confirmation if invitation processing fails
+                    }
+                }
 
                 return {
                     statusCode: 200,
@@ -2682,7 +2772,114 @@ Return the improved items in the same JSON format with better descriptions, accu
                 return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
             }
         }
+        // Builder profile endpoints
+        if (path.match(/^\/(?:prod\/)?builder\/profile$/) && method === 'GET') {
+            console.log('=== BUILDER PROFILE ENDPOINT HIT ===');
+            try {
+                console.log('Attempting to authenticate user...');
+                const user = requireAuth(event);
+                console.log('User authenticated:', JSON.stringify(user, null, 2));
+                if (user.userType !== 'builder') {
+                    return {
+                        statusCode: 403,
+                        headers,
+                        body: JSON.stringify({ error: 'Access denied. Builder account required.' })
+                    };
+                }
 
+                // Create default profile if it doesn't exist
+                const defaultProfile = {
+                    id: user.userId,
+                    companyName: user.email.split('@')[0] || 'My Company',
+                    contactPerson: {
+                        firstName: user.firstName || '',
+                        lastName: user.lastName || '',
+                        email: user.email,
+                        phone: ''
+                    },
+                    address: {
+                        street: '',
+                        city: '',
+                        postcode: ''
+                    },
+                    businessDetails: {
+                        registrationNumber: '',
+                        vatNumber: '',
+                        establishedYear: new Date().getFullYear(),
+                        employeeCount: 1
+                    },
+                    certifications: [],
+                    insurance: {
+                        publicLiability: {
+                            provider: '',
+                            policyNumber: '',
+                            coverage: 1000000,
+                            validUntil: ''
+                        },
+                        employersLiability: {
+                            provider: '',
+                            policyNumber: '',
+                            coverage: 10000000,
+                            validUntil: ''
+                        }
+                    },
+                    specializations: [],
+                    serviceAreas: [],
+                    portfolio: [],
+                    ratings: {
+                        overall: 0,
+                        quality: 0,
+                        timeliness: 0,
+                        communication: 0,
+                        reviewCount: 0
+                    }
+                };
+
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify(defaultProfile)
+                };
+            } catch (error) {
+                console.error('Get builder profile error:', error);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ error: 'Failed to get profile' })
+                };
+            }
+        }
+
+        if (path.match(/^\/(?:prod\/)?builder\/profile$/) && method === 'PUT') {
+            try {
+                const user = requireAuth(event);
+                
+                if (user.userType !== 'builder') {
+                    return {
+                        statusCode: 403,
+                        headers,
+                        body: JSON.stringify({ error: 'Access denied. Builder account required.' })
+                    };
+                }
+
+                const updates = JSON.parse(body);
+                
+                // For now, just return success - in a real implementation, 
+                // you'd store this in a builder-profiles table
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify({ success: true, message: 'Profile updated successfully' })
+                };
+            } catch (error) {
+                console.error('Update builder profile error:', error);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ error: 'Failed to update profile' })
+                };
+            }
+        }
         console.log('ERROR: Route not found');
         return {
             statusCode: 404,
@@ -2691,7 +2888,7 @@ Return the improved items in the same JSON format with better descriptions, accu
                 error: 'Not found', 
                 path: path, 
                 method: method,
-                availablePaths: ['/health', '/auth/register', '/auth/login', '/auth/confirm', '/auth/resend-confirmation', '/auth/forgot-password', '/auth/reset-password', '/projects', '/projects/validate-address', '/projects/invite-builder', '/projects/remove-builder', '/projects/access', '/documents/upload-url', '/documents/*/confirm', '/projects/*/documents', '/documents/*', '/projects/*/sow/generate', '/projects/*/sow/*/status', '/projects/*/sow/*', '/projects/*/sow/*/process']
+                availablePaths: ['/health', '/auth/register', '/auth/login', '/auth/confirm', '/auth/resend-confirmation', '/auth/forgot-password', '/auth/reset-password', '/projects', '/projects/validate-address', '/projects/invite-builder', '/projects/remove-builder', '/projects/access', '/documents/upload-url', '/documents/*/confirm', '/projects/*/documents', '/documents/*', '/projects/*/sow/generate', '/projects/*/sow/*/status', '/projects/*/sow/*', '/projects/*/sow/*/process', '/builder/profile', '/builder/projects']
             })
         };
 

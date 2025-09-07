@@ -91,8 +91,7 @@ class AuthService {
   /**
    * Confirm user registration
    */
-  async confirmRegistration(email: string, confirmationCode: string): Promise<void> {
-    try {
+  async confirmRegistration(email: string, confirmationCode: string, invitationCode?: string): Promise<void> {    try {
       const response = await fetch(`${this.baseUrl}/auth/confirm`, {
         method: 'POST',
         headers: {
@@ -101,6 +100,7 @@ class AuthService {
         body: JSON.stringify({
           email,
           confirmationCode,
+          invitationCode,
         }),
       });
 

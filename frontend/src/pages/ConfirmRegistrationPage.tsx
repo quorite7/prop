@@ -78,7 +78,7 @@ const ConfirmRegistrationPage: React.FC = () => {
     setSuccess('');
 
     try {
-      await confirmRegistration(email, data.confirmationCode);
+      await confirmRegistration(email, data.confirmationCode, invitationCode);
       setSuccess('Email verified successfully!');
       
       // For builders with invitation codes, auto-login and accept invitation
