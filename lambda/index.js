@@ -6,12 +6,19 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { PutObjectCommand } = require('@aws-sdk/client-s3');
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 const { v4: uuidv4 } = require('uuid');
+const { CognitoJWTVerifier } = require('./cognito-jwt-verifier');
 
 const dynamoClient = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(dynamoClient);
 const cognito = new CognitoIdentityProviderClient({});
 const s3 = new S3Client({});
 const bedrockRuntimeClient = new BedrockRuntimeClient({ region: 'eu-west-2' });
+
+// Initialize JWT verifier
+const jwtVerifier = new CognitoJWTVerifier(
+    process.env.USER_POOL_ID,
+    process.env.AWS_REGION || 'eu-west-2'
+);
 
 // Environment variables
 const PROJECTS_TABLE = process.env.PROJECTS_TABLE;
@@ -142,34 +149,21 @@ async function getUserTypeFromCognito(userId) {
     }
 }
 
-function extractUserFromToken(authHeader) {
+async function extractUserFromToken(authHeader) {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         throw new Error('Missing or invalid Authorization header');
     }
     
     const token = authHeader.substring(7);
     try {
-        // Basic JWT decode (for development - in production should use proper JWT verification)
-        const parts = token.split('.');
-        if (parts.length !== 3) {
-            throw new Error('Invalid JWT format');
-        }
+        // Use proper Cognito JWT verification
+        const payload = await jwtVerifier.verifyToken(token);
+        console.log('Verified JWT payload:', JSON.stringify(payload, null, 2));
         
-        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
-        console.log('JWT payload:', JSON.stringify(payload, null, 2));
-        
-        return {
-            sub: payload.sub,
-            userId: payload.sub,
-            email: payload.email,
-            userType: payload['custom:user_type'] || 'homeowner',
-            username: payload['cognito:username'] || payload.username,
-            firstName: payload.given_name || '',
-            lastName: payload.family_name || ''
-        };
+        return payload;
     } catch (error) {
-        console.error('JWT decode error:', error);
-        throw new Error('Invalid JWT token: ' + error.message);
+        console.error('JWT verification error:', error);
+        throw new Error('Invalid or expired token: ' + error.message);
     }
 }
 
@@ -446,7 +440,7 @@ exports.handler = async (event) => {
                         data: {
                             user: {
                                 email: email,
-                                userType: extractUserFromToken(`Bearer ${result.AuthenticationResult.IdToken}`).userType,
+                                userType: (await extractUserFromToken(`Bearer ${result.AuthenticationResult.IdToken}`)).userType,
                                 profile: {
                                     firstName: '',
                                     lastName: '',
@@ -1183,7 +1177,7 @@ exports.handler = async (event) => {
             console.log('Getting projects...');
             
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 console.log('Authenticated user:', user.userId, user.userType);
                 
                 await logAccess(user.userId, 'GET_PROJECTS', 'projects', true, { 
@@ -1286,7 +1280,7 @@ exports.handler = async (event) => {
             console.log('Creating project...');
             
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 console.log('Authenticated user creating project:', user.userId, user.userType);
                 
                 // Only homeowners can create projects
@@ -1390,7 +1384,7 @@ exports.handler = async (event) => {
         // Builder invitation endpoints
         if ((path === '/projects/invite-builder' || path === '/prod/projects/invite-builder') && method === 'POST') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const { projectId, builderEmail } = JSON.parse(event.body);
                 
                 // Only homeowners can invite builders
@@ -1446,7 +1440,7 @@ exports.handler = async (event) => {
         // Remove builder access
         if ((path === '/projects/remove-builder' || path === '/prod/projects/remove-builder') && method === 'POST') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const { projectId, builderId } = JSON.parse(event.body);
                 
                 if (user.userType !== 'homeowner' || !(await isProjectOwner(user.userId, projectId))) {
@@ -1483,7 +1477,7 @@ exports.handler = async (event) => {
         // Get project access list (for homeowners)
         if ((path === '/projects/access' || path === '/prod/projects/access') && method === 'GET') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const projectId = event.queryStringParameters?.projectId;
                 
                 if (!projectId) {
@@ -1529,7 +1523,7 @@ exports.handler = async (event) => {
         // Get project invitations - GET /projects/{projectId}/invitations
         if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/) && method === 'GET') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/);
                 const projectId = pathMatch[1];
                 
@@ -1564,7 +1558,7 @@ exports.handler = async (event) => {
         }        // Get individual project (with access control)
         if (path.match(/^\/(?:prod\/)?projects\/[^\/]+$/) && method === 'GET') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const projectId = path.split('/').pop();
                 
                 let hasAccess = false;
@@ -1845,7 +1839,7 @@ exports.handler = async (event) => {
         // Start questionnaire - POST /projects/{projectId}/questionnaire/start
         if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/questionnaire\/start$/) && method === 'POST') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const projectId = path.split('/')[2] === 'prod' ? path.split('/')[3] : path.split('/')[2];
                 
                 // Verify project ownership
@@ -1893,7 +1887,7 @@ exports.handler = async (event) => {
         // Get questionnaire session - GET /projects/{projectId}/questionnaire
         if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/questionnaire$/) && method === 'GET') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const projectId = path.split('/')[2] === 'prod' ? path.split('/')[3] : path.split('/')[2];
                 
                 // Verify project ownership
@@ -1940,7 +1934,7 @@ exports.handler = async (event) => {
         // Get next question - POST /projects/{projectId}/questionnaire/{sessionId}/next
         if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/questionnaire\/([^\/]+)\/next$/) && method === 'POST') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const pathParts = path.split('/');
                 const projectId = pathParts[2] === 'prod' ? pathParts[3] : pathParts[2];
                 const sessionId = pathParts[pathParts.length - 2];
@@ -2091,7 +2085,7 @@ Generate a single, specific question that will help builders provide better quot
         // Submit response - POST /projects/{projectId}/questionnaire/{sessionId}/response
         if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/questionnaire\/([^\/]+)\/response$/) && method === 'POST') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const pathParts = path.split('/');
                 const projectId = pathParts[2] === 'prod' ? pathParts[3] : pathParts[2];
                 const sessionId = pathParts[pathParts.length - 2];
@@ -2163,7 +2157,7 @@ Generate a single, specific question that will help builders provide better quot
         // Complete questionnaire - POST /projects/{projectId}/questionnaire/{sessionId}/complete
         if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/questionnaire\/([^\/]+)\/complete$/) && method === 'POST') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const pathParts = path.split('/');
                 const projectId = pathParts[2] === 'prod' ? pathParts[3] : pathParts[2];
                 const sessionId = pathParts[pathParts.length - 2];
@@ -2226,7 +2220,7 @@ Generate a single, specific question that will help builders provide better quot
         if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/generate$/) && method === "POST") {
             console.log('=== SOW ENDPOINT MATCHED ===');
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/generate$/);
                 const projectId = pathMatch[1];
 
@@ -2296,7 +2290,7 @@ Generate a single, specific question that will help builders provide better quot
         // Get SoW Status - GET /projects/{projectId}/sow/{sowId}/status
         if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)\/status$/) && method === "GET") {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)\/status$/);
                 const projectId = pathMatch[1];
                 const sowId = pathMatch[2];
@@ -2318,7 +2312,7 @@ Generate a single, specific question that will help builders provide better quot
         // Get SoW Document - GET /projects/{projectId}/sow/{sowId}
         if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)$/) && method === "GET") {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)$/);
                 const projectId = pathMatch[1];
                 const sowId = pathMatch[2];
@@ -2429,7 +2423,7 @@ Return the improved items in the same JSON format with better descriptions, accu
         // Generate builder invitation code - POST /projects/{projectId}/invitations
         if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/) && method === 'POST') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/);
                 const projectId = pathMatch[1];
                 const { builderEmail } = JSON.parse(body);
@@ -2466,7 +2460,7 @@ Return the improved items in the same JSON format with better descriptions, accu
         // Get project invitations - GET /projects/{projectId}/invitations
         if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/) && method === 'GET') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/);
                 const projectId = pathMatch[1];
 
@@ -2491,7 +2485,7 @@ Return the improved items in the same JSON format with better descriptions, accu
         // Accept invitation (for existing builders) - POST /invitations/accept
         if (path.match(/^\/(?:prod\/)?invitations\/accept$/) && method === 'POST') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const { invitationCode } = JSON.parse(body);
 
                 const result = await dynamodb.send(new QueryCommand({
@@ -2541,7 +2535,7 @@ Return the improved items in the same JSON format with better descriptions, accu
         // Get builder project access - GET /builder/projects
         if (path.match(/^\/(?:prod\/)?builder\/projects$/) && method === 'GET') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
 
                 const result = await dynamodb.send(new QueryCommand({
                     TableName: 'project-access',
@@ -2572,7 +2566,7 @@ Return the improved items in the same JSON format with better descriptions, accu
         // Get project for builder - GET /builder/projects/{projectId}
         if (path.match(/^\/(?:prod\/)?builder\/projects\/([^\/]+)$/) && method === 'GET') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const pathMatch = path.match(/^\/(?:prod\/)?builder\/projects\/([^\/]+)$/);
                 const projectId = pathMatch[1];
 
@@ -2624,7 +2618,7 @@ Return the improved items in the same JSON format with better descriptions, accu
         // Submit quote - POST /builder/projects/{projectId}/quotes
         if (path.match(/^\/(?:prod\/)?builder\/projects\/([^\/]+)\/quotes$/) && method === 'POST') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const pathMatch = path.match(/^\/(?:prod\/)?builder\/projects\/([^\/]+)\/quotes$/);
                 const projectId = pathMatch[1];
                 const quoteData = JSON.parse(body);
@@ -2667,7 +2661,7 @@ Return the improved items in the same JSON format with better descriptions, accu
         // Get project quotes (for project owner) - GET /projects/{projectId}/quotes
         if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/quotes$/) && method === 'GET') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/quotes$/);
                 const projectId = pathMatch[1];
 
@@ -2691,7 +2685,7 @@ Return the improved items in the same JSON format with better descriptions, accu
         // Generate builder invitation code - POST /projects/{projectId}/invitations
         if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/) && method === 'POST') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/);
                 const projectId = pathMatch[1];
                 const { builderEmail } = JSON.parse(body);
@@ -2728,7 +2722,7 @@ Return the improved items in the same JSON format with better descriptions, accu
         // Get project invitations - GET /projects/{projectId}/invitations
         if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/) && method === 'GET') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/);
                 const projectId = pathMatch[1];
 
@@ -2752,7 +2746,7 @@ Return the improved items in the same JSON format with better descriptions, accu
         // Get project quotes (for project owner) - GET /projects/{projectId}/quotes
         if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/quotes$/) && method === 'GET') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/quotes$/);
                 const projectId = pathMatch[1];
 
@@ -2777,7 +2771,7 @@ Return the improved items in the same JSON format with better descriptions, accu
             console.log('=== BUILDER PROFILE ENDPOINT HIT ===');
             try {
                 console.log('Attempting to authenticate user...');
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 console.log('User authenticated:', JSON.stringify(user, null, 2));
                 if (user.userType !== 'builder') {
                     return {
@@ -2790,11 +2784,11 @@ Return the improved items in the same JSON format with better descriptions, accu
                 // Create default profile if it doesn't exist
                 const defaultProfile = {
                     id: user.userId,
-                    companyName: user.email.split('@')[0] || 'My Company',
+                    companyName: (user.email && user.email.split('@')[0]) || user.username || 'My Company',
                     contactPerson: {
                         firstName: user.firstName || '',
                         lastName: user.lastName || '',
-                        email: user.email,
+                        email: user.email || user.username || '',
                         phone: ''
                     },
                     address: {
@@ -2852,7 +2846,7 @@ Return the improved items in the same JSON format with better descriptions, accu
 
         if (path.match(/^\/(?:prod\/)?builder\/profile$/) && method === 'PUT') {
             try {
-                const user = requireAuth(event);
+                const user = await requireAuth(event);
                 
                 if (user.userType !== 'builder') {
                     return {

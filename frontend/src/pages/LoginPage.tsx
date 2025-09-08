@@ -37,7 +37,7 @@ interface LoginFormData {
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isAuthenticated, loading } = useAuth();
+  const { login, isAuthenticated, loading, user } = useAuth();
   const [error, setError] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -45,10 +45,14 @@ const LoginPage: React.FC = () => {
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (!loading && isAuthenticated) {
-      navigate('/app/dashboard', { replace: true });
+    if (!loading && isAuthenticated && user) {
+      if (user.userType === 'builder') {
+        navigate('/app/builder/dashboard', { replace: true });
+      } else {
+        navigate('/app/projects', { replace: true });
+      }
     }
-  }, [isAuthenticated, loading, navigate]);
+  }, [isAuthenticated, loading, user, navigate]);
 
   const {
     register,
@@ -64,7 +68,7 @@ const LoginPage: React.FC = () => {
 
     try {
       await login(data.email, data.password);
-      navigate(from, { replace: true });
+      // Let useEffect handle the redirect based on user type
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Login failed. Please try again.');
     } finally {

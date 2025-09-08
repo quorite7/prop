@@ -30,7 +30,6 @@ import {
   Work as WorkIcon,
   Assignment as AssignmentIcon,
   Add as AddIcon,
-  Person as PersonIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { builderInvitationService } from '../services/builderInvitationService';
@@ -195,12 +194,6 @@ const BuilderDashboardPageNew: React.FC = () => {
             id="builder-tab-1"
             aria-controls="builder-tabpanel-1"
           />
-          <Tab 
-            icon={<PersonIcon />} 
-            label="Profile" 
-            id="builder-tab-2"
-            aria-controls="builder-tabpanel-2"
-          />
         </Tabs>
       </Box>
 
@@ -288,18 +281,6 @@ const BuilderDashboardPageNew: React.FC = () => {
           <Typography variant="body2" color="text.secondary">
             View and manage your submitted quotes
           </Typography>
-        </Box>
-      </TabPanel>
-
-      <TabPanel value={tabValue} index={2}>
-        <Box display="flex" justifyContent="center">
-          <Button 
-            variant="contained" 
-            size="large"
-            onClick={() => navigate('/app/profile')}
-          >
-            Manage Profile
-          </Button>
         </Box>
       </TabPanel>
 

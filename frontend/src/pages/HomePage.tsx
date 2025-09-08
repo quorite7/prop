@@ -26,7 +26,13 @@ const HomePage: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
   // const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+
+  const getStartProjectPath = () => {
+    if (!isAuthenticated) return '/register';
+    if (user?.userType === 'builder') return '/app/builder/dashboard';
+    return '/app/projects/create';
+  };
 
   const features = [
     {
@@ -131,7 +137,7 @@ const HomePage: React.FC = () => {
               <Button
                 variant="contained"
                 size="large"
-                onClick={() => navigate('/projects/create')}
+                onClick={() => navigate(getStartProjectPath())}
                 sx={{
                   bgcolor: 'white',
                   color: 'primary.main',
@@ -261,7 +267,7 @@ const HomePage: React.FC = () => {
                   <CardActions>
                     <Button
                       size="small"
-                      onClick={() => navigate(isAuthenticated ? '/projects/create' : '/onboarding')}
+                      onClick={() => navigate(getStartProjectPath())}
                     >
                       Learn More
                     </Button>
@@ -284,7 +290,7 @@ const HomePage: React.FC = () => {
         <Button
           variant="contained"
           size="large"
-          onClick={() => navigate(isAuthenticated ? '/projects/create' : '/onboarding')}
+          onClick={() => navigate(getStartProjectPath())}
           sx={{ px: 4, py: 1.5, fontSize: '1.1rem' }}
         >
           {isAuthenticated ? 'Start New Project' : 'Get Started Today'}

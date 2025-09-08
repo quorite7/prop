@@ -24,6 +24,7 @@ import QuoteSubmissionPage from './pages/QuoteSubmissionPage';
 import QuoteDetailsPage from './pages/QuoteDetailsPage';
 import BuilderProfilePage from './pages/BuilderProfilePage';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
+import SmartDashboard from './components/SmartDashboard';
 import AIAssistantChat from './components/AIAssistant/AIAssistantChat';
 
 // Initialize Amplify configuration
@@ -58,15 +59,23 @@ function App() {
               <Route 
                 path="projects/create" 
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="homeowner">
                     <ProjectCreationPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="projects" 
+                element={
+                  <ProtectedRoute requiredRole="homeowner">
+                    <ProjectDashboardPage />
                   </ProtectedRoute>
                 } 
               />
               <Route 
                 path="projects/:projectId" 
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="homeowner">
                     <ProjectDashboardPage />
                   </ProtectedRoute>
                 } 
@@ -74,8 +83,8 @@ function App() {
               <Route 
                 path="dashboard" 
                 element={
-                  <ProtectedRoute>
-                    <ProjectDashboardPage />
+                  <ProtectedRoute requiredRole="homeowner">
+                    <SmartDashboard />
                   </ProtectedRoute>
                 } 
               />
@@ -84,7 +93,7 @@ function App() {
               <Route 
                 path="builder/dashboard" 
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="builder">
                     <BuilderDashboardPageNew />
                   </ProtectedRoute>
                 } 
@@ -92,7 +101,7 @@ function App() {
               <Route 
                 path="builder/projects/:projectId" 
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="builder">
                     <BuilderProjectViewPage />
                   </ProtectedRoute>
                 } 
@@ -100,7 +109,7 @@ function App() {
               <Route 
                 path="builder/projects/:projectId/quote" 
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="builder">
                     <BuilderProjectViewPage />
                   </ProtectedRoute>
                 } 
@@ -150,7 +159,7 @@ function App() {
               <Route 
                 path="builder/profile" 
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="builder">
                     <BuilderProfilePage />
                   </ProtectedRoute>
                 } 
