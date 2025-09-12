@@ -150,17 +150,18 @@ In the Details section on the project dashboard, implement GenAI-guided question
 **Prompt for AWS Q CLI:**
 
 ```
-Implement direct LLM integration for SoW generation (without AI agents):
-1. Add Bedrock API integration to Lambda function
-2. Create SoW generation endpoint that takes project details and questionnaire responses
-3. Implement prompt engineering for generating detailed SoW based on UK building standards
-4. Add 30-minute processing simulation with proper status tracking
-5. Generate SoW with sections: scope, materials (builder vs homeowner), labor, timeline
-6. Store generated SoW in DynamoDB linked to project
-7. Create SoW display component in project dashboard
-8. Add "Generate SoW" button that triggers generation and shows progress
-9. Implement SoW regeneration capability when project details change
-10. Add basic cost estimation in the generated SoW
+Implement direct LLM integration for SoW generation:
+1. Based upon the data collected from the user a SoW has to be generated
+2. Use Bedrock API integration to Lambda function
+3. Create SoW generation endpoint that takes project details and questionnaire responses
+4. Implement prompt engineering for generating detailed SoW based on UK building standards
+5. Add 30-minute processing simulation with proper status tracking
+6. Generate SoW with sections: scope, materials (builder vs homeowner), labor, timeline
+7. Store generated SoW in DynamoDB linked to project
+8. Create SoW display component in project dashboard
+9. Add "Generate SoW" button that triggers generation and shows progress
+10. Implement SoW regeneration capability when project details change
+11. Add basic cost estimation in the generated SoW
 ```
 
 ### **PHASE 2: Builder Integration & Quote Management (Weeks 5-7)**
@@ -171,9 +172,11 @@ Implement direct LLM integration for SoW generation (without AI agents):
 
 ```
 Implement secure builder invitation system integrated into project dashboard:
-1. Add "Invite Builders" section to project dashboard (enabled after SoW generation)
+1. There's already a "Invite Builders" section under the Builders tab on the project dashboard (enabled after SoW generation)
 2. Create secure one-time invitation code generation with expiration
-3. Implement builder registration with invitation code validation and project association
+3. Implement builder registration with invitation code validation to register on the platform and project association
+3.1. When a builder already on the platform recieves a new invitation code, they will be able to get access to the project using this activation code
+3.2. When a builder who is not on the plafrom receives an activation code, they will be allowed to register to the platform using the activation code, which also give them access to the project they were invited for. So for a new builder, the activation code gives them access to the platform and a project
 4. Add builder access to specific projects ONLY via valid invitation codes (view and quote only)
 5. Create secure builder project view showing SoW and quote submission interface (no project creation)
 6. Add builder quote submission functionality with proper user validation
