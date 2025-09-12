@@ -1982,8 +1982,9 @@ exports.handler = async (event) => {
                 // Try to generate AI question using Bedrock
                 let aiResponse;
                 try {
-                    const prompt = `You are an expert home improvement consultant. Based on the project details below, generate the next most important question to ask the homeowner.
-
+                    const prompt = `You are assisting an experienced UK home renovations builder to prepare detailed Statements of Work (SoW) and accurate quotes.
+                    I have already gathered basic project information from the client (provided below).
+                    Your role is to ask intelligent, project-specific dynamic questions to gather all remaining information needed for accurate SoW and quote preparation.
 Project Details:
 - Type: ${project.projectType}
 - Description: ${project.description || 'Not specified'}
@@ -1991,19 +1992,68 @@ Project Details:
 - Timeline: ${project.timeline || 'Not specified'}
 - Previous responses: ${JSON.stringify(session.responses || [])}
 
-Generate a single, specific question that will help builders provide better quotes. Return ONLY a JSON object with this structure:
+Your Task:
+Based on the fixed information above, ask ONE targeted question at a time to gather project-specific details. Focus only on information that directly impacts the SoW scope, specifications, and accurate costing for THIS specific project type.
+
+Professional Approach:
+1. Lead with expertise: Start with the most critical technical question that impacts feasibility or major costs
+2. Think like a builder: Consider practical implications, potential problems, and cost drivers
+3. Maximum 8 strategic questions: Focus on information that genuinely affects your quote accuracy
+4. Use professional judgment: Skip questions where your experience suggests standard assumptions are adequate
+5. Signal completion: When you have enough information to prepare a comprehensive quote and SoW
+
+Response Format Required:
+You MUST format every response as a JSON object using this exact structure:
 {
   "question": {
     "id": "unique_question_id",
     "text": "Your question here",
-    "type": "multiple_choice|text|scale",
+    "type": "multiple_choice|text",
     "options": ["option1", "option2"] (only for multiple_choice),
     "required": true|false
   },
   "reasoning": "Brief explanation of why this question is important"
-}`;
+}
+Question Types:
+"text": For open-ended responses requiring detailed answers
+"multiple_choice": When specific options help clarify scope or specifications
+
+Draw on your 15+ years of building experience to ask the most important question first.
+What do you need to know to quote this job accurately? Format your response as the JSON object specified above.
+
+Question Limits & Stopping Criteria:
+1. Maximum 8-10 dynamic questions for most projects
+2. Stop immediately when you have sufficient information for:
+2.1. Clear scope definition and work breakdown
+2.2. Accurate material specifications and quantities
+2.3. Labour time estimation
+2.4. Access and logistics planning
+2.5. Regulatory compliance requirements
+
+Completion Signal:
+When you have enough information, you MUST respond with:
+"INFORMATION GATHERING COMPLETE" followed by a brief summary of key points that will enable accurate SoW and quote preparation.
+
+Your Approach:
+1. Start with the most critical project-specific question that affects scope/pricing
+2. Ask maximum 8-10 targeted questions (fewer if possible)
+3. Focus ONLY on details that directly impact costing or work methodology
+4. Clarify vague responses with follow-ups (these count toward your question limit)
+5. Signal completion as soon as you can prepare a comprehensive SoW/quote
+
+Priority Order for Questions:
+1. Critical scope boundaries (what's included/excluded)
+2. Structural/technical requirements (affects major costs)
+3. Access/logistics constraints (affects time/labour costs)
+4. Key specifications (materials, finishes that affect pricing)
+5. Regulatory requirements not already covered by documents
+
+Begin by asking your first dynamic question. Remember: Maximum 8-10 questions, then signal completion.
+`;
 
                     console.log('Attempting Bedrock AI generation...');
+                    console.log('=== BEDROCK PROMPT ===');
+                    console.log('Prompt:', prompt);
                     const command = new InvokeModelCommand({
                         modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
                         body: JSON.stringify({
@@ -2020,6 +2070,10 @@ Generate a single, specific question that will help builders provide better quot
 
                     const response = await bedrockRuntimeClient.send(command);
                     const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+                    
+                    console.log('Full Bedrock Parameters:', JSON.stringify(responseBody, null, 2));
+                    console.log('=== END BEDROCK PROMPT ===');
+
                     aiResponse = JSON.parse(responseBody.content[0].text);
                     aiResponse.isComplete = session.currentQuestionIndex >= 8; // AmitD: Temporary stop LLM to 8 questions
                     aiResponse.isAIGenerated = true;
