@@ -1,7 +1,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, ScanCommand, PutCommand, QueryCommand, GetCommand, DeleteCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { CognitoIdentityProviderClient, AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminInitiateAuthCommand, AdminConfirmSignUpCommand, SignUpCommand, ConfirmSignUpCommand, ResendConfirmationCodeCommand, ForgotPasswordCommand, ConfirmForgotPasswordCommand } = require('@aws-sdk/client-cognito-identity-provider');
-const { S3Client, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { PutObjectCommand } = require('@aws-sdk/client-s3');
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
@@ -12,7 +12,7 @@ const dynamoClient = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(dynamoClient);
 const cognito = new CognitoIdentityProviderClient({});
 const s3 = new S3Client({});
-const bedrockRuntimeClient = new BedrockRuntimeClient({ region: 'eu-west-2' });
+const bedrockRuntimeClient = new BedrockRuntimeClient({ region: 'eu-west-1' });
 
 // Initialize JWT verifier
 const jwtVerifier = new CognitoJWTVerifier(
@@ -29,6 +29,47 @@ const SOW_TASKS_TABLE = process.env.SOW_TASKS_TABLE || 'sow-tasks';
 
 // Utility functions
 const generateId = () => uuidv4();
+
+// Function to retrieve project documents from S3
+async function getProjectDocuments(projectId) {
+    try {
+        // Get document metadata from DynamoDB
+        const result = await dynamodb.send(new QueryCommand({
+            TableName: 'uk-home-documents',
+            IndexName: 'ProjectIdIndex',
+            KeyConditionExpression: 'projectId = :projectId',
+            ExpressionAttributeValues: {
+                ':projectId': projectId
+            }
+        }));
+
+        const documents = [];
+        for (const doc of result.Items || []) {
+            try {
+                // Get document content from S3
+                const s3Response = await s3.send(new GetObjectCommand({
+                    Bucket: 'uk-home-documents-bucket',
+                    Key: doc.s3Key
+                }));
+                
+                const content = await s3Response.Body.transformToString();
+                documents.push({
+                    fileName: doc.fileName,
+                    fileType: doc.fileType,
+                    content: content.substring(0, 10000) // Limit content to 10KB per document
+                });
+            } catch (s3Error) {
+                console.log(`Could not retrieve document ${doc.fileName}:`, s3Error.message);
+                // Continue with other documents
+            }
+        }
+        
+        return documents;
+    } catch (error) {
+        console.log('Error retrieving project documents:', error);
+        return [];
+    }
+}
 
 // Bedrock SoW generation function
 async function generateSoWWithBedrock(sowId, project, questionnaireSession) {
@@ -1982,12 +2023,23 @@ exports.handler = async (event) => {
                 // Try to generate AI question using Bedrock
                 let aiResponse;
                 try {
+                    // Retrieve project documents to include as context
+                    const projectDocuments = await getProjectDocuments(projectId);
+                    let documentsContext = '';
+                    if (projectDocuments.length > 0) {
+                        documentsContext += '\nUse the following documents to inform your questions and avoid asking for information already provided.\n';
+                        documentsContext = '\n\nProject Documents Available:\n';
+                        projectDocuments.forEach(doc => {
+                            documentsContext += `\n--- ${doc.fileName} (${doc.fileType}) ---\n${doc.content}\n`;
+                        });
+                    }
                     const prompt = `You are assisting an experienced UK home renovations builder to prepare detailed Statements of Work (SoW) and accurate quotes.
                     I have already gathered basic project information from the client (provided below).
                     Your role is to ask intelligent, project-specific dynamic questions to gather all remaining information needed for accurate SoW and quote preparation.
 Project Details:
 - Type: ${project.projectType}
 - Description: ${project.description || 'Not specified'}
+- Project Documentation: ${documentsContext || 'Not provided'}
 - Budget: ${project.budget || 'Not specified'}
 - Timeline: ${project.timeline || 'Not specified'}
 - Previous responses: ${JSON.stringify(session.responses || [])}
@@ -2002,8 +2054,7 @@ Professional Approach:
 4. Use professional judgment: Skip questions where your experience suggests standard assumptions are adequate
 5. Signal completion: When you have enough information to prepare a comprehensive quote and SoW
 
-Response Format Required:
-You MUST format every response as a JSON object using this exact structure:
+Response Format: You are allowed to respond ONLY in a JSON object using this exact structure. Any other response or preamble will cause error:
 {
   "question": {
     "id": "unique_question_id",
@@ -2050,12 +2101,11 @@ Priority Order for Questions:
 
 Begin by asking your first dynamic question. Remember: Maximum 8-10 questions, then signal completion.
 `;
-
                     console.log('Attempting Bedrock AI generation...');
                     console.log('=== BEDROCK PROMPT ===');
                     console.log('Prompt:', prompt);
                     const command = new InvokeModelCommand({
-                        modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
+                        modelId: 'eu.anthropic.claude-sonnet-4-20250514-v1:0',
                         body: JSON.stringify({
                             anthropic_version: 'bedrock-2023-05-31',
                             max_tokens: 1000,
