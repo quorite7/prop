@@ -230,7 +230,9 @@ Resources:
               - Effect: Allow
                 Action:
                   - bedrock:InvokeModel
-                Resource: "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0"
+                Resource: 
+                  - "arn:aws:bedrock:*:*:inference-profile/eu.anthropic.claude-sonnet-4-20250514-v1:0"
+                  - "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-20250514-v1:0"
         - PolicyName: CognitoAccess
           PolicyDocument:
             Version: "2012-10-17"
