@@ -73,23 +73,193 @@ async function getProjectDocuments(projectId) {
 
 // Bedrock SoW generation function
 async function generateSoWWithBedrock(sowId, project, questionnaireSession) {
-    const prompt = `Generate a detailed Scope of Work for a UK home improvement project:
 
-Project Type: ${project.projectType}
-Property Address: ${project.propertyAddress.line1}, ${project.propertyAddress.city}, ${project.propertyAddress.postcode}
-Description: ${project.requirements.description}
-Budget Range: £${project.requirements.budget && project.requirements.budget.min || 0} - £${project.requirements.budget && project.requirements.budget.max || 50000}
+                        // Retrieve project documents to include as context
+                    const projectDocuments = await getProjectDocuments(project.id);
+                    let documentsContext = '';
+                    if (projectDocuments.length > 0) {
+                        documentsContext += '\nUse the following documents to inform your questions and avoid asking for information already provided.\n';
+                        projectDocuments.forEach(doc => {
+                            documentsContext += `\n--- ${doc.fileName} (${doc.fileType}) ---\n${doc.content}\n`;
+                        });
+                    }
 
+    // New JSON-focused prompt for reliable parsing
+    const jsonPrompt = `You are an experienced UK home renovations builder. Create a Statement of Work and return ONLY a valid JSON object with this exact structure:
+
+{
+  "title": "Statement of Work - ${project.projectType}",
+  "sections": [
+    {
+      "title": "Executive Summary",
+      "content": "Project overview, objectives, scope summary, timeline, and total value"
+    },
+    {
+      "title": "Detailed Scope of Work", 
+      "content": "Comprehensive breakdown of all work packages including structural, building envelope, internal works, M&E, and finishes"
+    },
+    {
+      "title": "Materials and Specifications",
+      "content": "Material grades, standards (BS/EN), quality requirements, sustainability measures"
+    },
+    {
+      "title": "Programme and Milestones",
+      "content": "Work sequence, milestone dates, critical path, inspection points"
+    },
+    {
+      "title": "Costs and Payment Schedule",
+      "content": "Cost breakdown, payment milestones, variation procedures"
+    },
+    {
+      "title": "Quality Standards and Compliance",
+      "content": "Building Regulations compliance, NHBC Standards, quality control, warranties"
+    },
+    {
+      "title": "Health, Safety and Environmental",
+      "content": "CDM 2015 compliance, risk assessments, environmental protection, waste management"
+    },
+    {
+      "title": "Contract Conditions",
+      "content": "Start/completion dates, insurance, dispute resolution, acceptance criteria"
+    }
+  ],
+  "projectDetails": {
+    "type": "${project.projectType}",
+    "address": "${project.propertyAddress ? Object.values(project.propertyAddress).join(', ') : 'Not specified'}",
+    "requirements": "${project.requirements?.description || 'Not specified'}",
+    "estimatedValue": ${project.requirements?.budget?.max},
+    "duration": "8-12 weeks"
+  }
+}
+
+Project Details:
+- Type: ${project.projectType}
+- Address: ${project.propertyAddress ? Object.values(project.propertyAddress).join(', ') : 'Not specified'}
+- Requirements: ${project.requirements?.description || 'Not specified'}
+- Budget: ${project.requirements?.budget ? `£${project.requirements.budget.min || 0} - £${project.requirements.budget.max || 'Open'}` : 'Not specified'}
+
+IMPORTANT: Return ONLY the JSON object above with detailed professional content in each section. No additional text before or after the JSON.`;
+
+// Old prompt
+    const prompt = `You are an experienced UK home renovations builder with 15+ years of experience, preparing a comprehensive Statement of Work (SoW) for a residential construction project.
+You must create a professional, detailed SoW that complies with UK industry standards and best practices.
+
+## Project Information to Include:
+**Fixed Information:**
+- Project Type: ${project.projectType}
+- Property Address: ${project.propertyAddress.line1}, ${project.propertyAddress.city}, ${project.propertyAddress.postcode}
+- Description: ${project.requirements.description}
+- Project Documentation: ${documentsContext || 'Not provided'}
+
+**Dynamic Information Gathered:**
 Questionnaire Responses: ${JSON.stringify(questionnaireSession.responses)}
 
-Generate a comprehensive SoW with:
-1. Project scope and specifications
-2. Materials list (categorized by builder vs homeowner responsibility)  
-3. Labor requirements and timeline
-4. Cost estimation
-5. UK building standards compliance
+## Industry Standards Compliance:
+Your SoW MUST reference and comply with the following UK industry guidelines where applicable:
 
-Format as JSON with sections: scope, materials, labor, timeline, costs, permits, standards.`;
+### **RICS (Royal Institution of Chartered Surveyors) Standards:**
+- RICS New Rules of Measurement (NRM1) for cost estimating and cost planning
+- RICS New Rules of Measurement (NRM2) for detailed measurement for building works
+- RICS Professional Standards for project management and cost control
+- RICS Building Survey and Condition Assessment guidelines
+
+### **RIBA Plan of Work 2020:**
+- Stage 0: Strategic Definition
+- Stage 1: Preparation and Briefing  
+- Stage 2: Concept Design
+- Stage 3: Spatial Coordination
+- Stage 4: Technical Design
+- Stage 5: Manufacturing and Construction
+- Stage 6: Handover
+- Stage 7: Use
+Reference appropriate RIBA stages for this project's scope and current phase.
+
+### **NHBC (National House Building Council) Guidelines:**
+- NHBC Standards for construction quality and methodology
+- Technical requirements for structural work, insulation, and weatherproofing
+- Quality assurance and inspection requirements
+- Warranty and defects liability considerations
+
+### **Additional UK Standards:**
+- Building Regulations 2010 (and amendments)
+- CDM Regulations 2015 (Construction Design and Management)
+- British Standards (BS) relevant to construction materials and methods
+- Local Authority planning and building control requirements
+
+## Required SoW Structure:
+
+### 1. Executive Summary
+- Project overview and key objectives
+- Total contract value and timeline
+- Critical success factors and risks
+
+### 2. Project Description
+- Detailed scope of work with clear boundaries
+- Property details and existing conditions
+- Client requirements and project vision alignment
+
+### 3. Scope of Work (Detailed)
+- **Included Works:** Comprehensive list organized by trade/phase
+- **Excluded Works:** Clear statement of what's not included
+- **Provisional Items:** Items subject to further investigation
+- **Prime Cost Items:** Client-selected items with allowances
+
+### 4. Standards and Compliance
+- Reference to applicable RICS, RIBA, NHBC standards
+- Building Regulations compliance strategy
+- Planning permission conditions adherence
+- Quality standards and British Standards to be applied
+
+### 5. Programme and Methodology
+- Work phases aligned with RIBA stages where applicable
+- Critical path activities and dependencies
+- Methodology referencing NHBC best practices
+- Client decision points and approval stages
+
+### 6. Materials and Specifications
+- Material specifications referencing British Standards
+- Quality grades and performance requirements
+- Supplier/manufacturer requirements
+- Environmental and sustainability considerations
+
+### 7. Health, Safety and Compliance
+- CDM 2015 compliance and responsibilities
+- Risk assessments and method statements
+- Insurance and liability requirements
+- Site safety measures and client obligations
+
+### 8. Quality Assurance
+- Inspection schedules aligned with NHBC standards
+- Hold points and witness points
+- Testing and commissioning requirements
+- Defects liability and warranty periods
+
+### 9. Commercial Terms
+- Payment schedule tied to completion milestones
+- Variations procedure (RICS compliant)
+- Cost control and reporting methods
+- Final account procedures
+
+### 10. Handover and Post-Completion
+- Commissioning and testing procedures
+- Documentation and warranties to be provided
+- RIBA Stage 6 handover requirements
+- Maintenance requirements and guidance
+
+## Professional Requirements:
+- Use appropriate technical terminology and industry standards references
+- Include relevant clause numbers from Building Regulations where applicable
+- Reference specific NHBC Technical Standards sections
+- Align work stages with RIBA Plan of Work 2020
+- Use NRM2 work breakdown structure for detailed items
+- Include risk assessments and mitigation strategies
+- Professional presentation with clear section numbering
+
+## Output Format:
+Create a comprehensive, professional SoW document that demonstrates industry expertise and compliance with UK construction standards. The document should be suitable for client signature and legally binding contract formation.
+
+**Begin creating the Statement of Work using the project information provided above and ensuring full compliance with the referenced industry standards.**
+`;
 
     const bedrockParams = {
         modelId: 'eu.anthropic.claude-sonnet-4-20250514-v1:0',
@@ -97,8 +267,8 @@ Format as JSON with sections: scope, materials, labor, timeline, costs, permits,
         accept: 'application/json',
         body: JSON.stringify({
             anthropic_version: 'bedrock-2023-05-31',
-            max_tokens: 4000,
-            messages: [{ role: 'user', content: prompt }]
+            max_tokens: 40000,
+            messages: [{ role: 'user', content: jsonPrompt }]
         })
     };
 
@@ -123,12 +293,24 @@ Format as JSON with sections: scope, materials, labor, timeline, costs, permits,
     try {
         sowData = JSON.parse(generatedContent);
     } catch (e) {
-        sowData = {
-            scope: { description: generatedContent.substring(0, 1000) },
-            materials: { total: project.requirements.budget && project.requirements.budget.max || 25000 },
-            timeline: { totalDuration: 30 },
-            costs: { total: project.requirements.budget && project.requirements.budget.max || 25000 }
-        };
+        console.error("Failed to parse Bedrock response as JSON:", e.message);
+        console.error("Response content:", generatedContent.substring(0, 500));
+        
+        // Update task with error status
+        await dynamodb.send(new UpdateCommand({
+            TableName: SOW_TASKS_TABLE,
+            Key: { id: sowId },
+            UpdateExpression: "SET #status = :status, progress = :progress, updatedAt = :updatedAt, errorMessage = :error",
+            ExpressionAttributeNames: { "#status": "status" },
+            ExpressionAttributeValues: {
+                ":status": "failed",
+                ":progress": 0,
+                ":updatedAt": new Date().toISOString(),
+                ":error": `JSON parsing failed: ${e.message}`
+            }
+        }));
+        
+        throw new Error(`Failed to parse SoW response: ${e.message}`);
     }
 
     const sow = {
@@ -2022,13 +2204,13 @@ exports.handler = async (event) => {
 
                 // Try to generate AI question using Bedrock
                 let aiResponse;
+                console.log(project);
                 try {
                     // Retrieve project documents to include as context
                     const projectDocuments = await getProjectDocuments(projectId);
                     let documentsContext = '';
                     if (projectDocuments.length > 0) {
                         documentsContext += '\nUse the following documents to inform your questions and avoid asking for information already provided.\n';
-                        documentsContext = '\n\nProject Documents Available:\n';
                         projectDocuments.forEach(doc => {
                             documentsContext += `\n--- ${doc.fileName} (${doc.fileType}) ---\n${doc.content}\n`;
                         });
@@ -2038,7 +2220,7 @@ exports.handler = async (event) => {
                     Your role is to ask intelligent, project-specific dynamic questions to gather all remaining information needed for accurate SoW and quote preparation.
 Project Details:
 - Type: ${project.projectType}
-- Description: ${project.description || 'Not specified'}
+- Description/Vision: ${project.requirements?.description || 'Not specified'}
 - Project Documentation: ${documentsContext || 'Not provided'}
 - Budget: ${project.budget || 'Not specified'}
 - Timeline: ${project.timeline || 'Not specified'}
@@ -2523,7 +2705,51 @@ Return the improved items in the same JSON format with better descriptions, accu
                 return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
             }
         }
+        // Accept SoW - POST /projects/{projectId}/sow/{sowId}/accept
+        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)\/accept$/) && method === "POST") {
+            try {
+                const user = await requireAuth(event);
+                const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)\/accept$/);
+                const projectId = pathMatch[1];
+                const sowId = pathMatch[2];
 
+                // Verify project ownership
+                const projectResult = await dynamodb.send(new GetCommand({
+                    TableName: PROJECTS_TABLE,
+                    Key: { id: projectId }
+                }));
+
+                if (!projectResult.Item || projectResult.Item.userId !== user.userId) {
+                    return { statusCode: 403, headers, body: JSON.stringify({ error: 'Access denied' }) };
+                }
+
+                // Verify SoW exists and belongs to project
+                const sowResult = await dynamodb.send(new GetCommand({
+                    TableName: 'sow-documents',
+                    Key: { id: sowId }
+                }));
+
+                if (!sowResult.Item || sowResult.Item.projectId !== projectId) {
+                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'SoW not found' }) };
+                }
+
+                // Update project status to sow_ready
+                await dynamodb.send(new UpdateCommand({
+                    TableName: PROJECTS_TABLE,
+                    Key: { id: projectId },
+                    UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+                    ExpressionAttributeNames: { '#status': 'status' },
+                    ExpressionAttributeValues: {
+                        ':status': 'sow_ready',
+                        ':updatedAt': new Date().toISOString()
+                    }
+                }));
+
+                return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
+            } catch (error) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+            }
+        }
         // Generate builder invitation code - POST /projects/{projectId}/invitations
         if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/invitations$/) && method === 'POST') {
             try {

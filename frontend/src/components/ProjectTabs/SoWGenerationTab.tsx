@@ -6,14 +6,12 @@ import {
   CardContent,
   Button,
   Alert,
-  CircularProgress,
-  LinearProgress,
   Grid,
 } from '@mui/material';
 import { Description as DescriptionIcon } from '@mui/icons-material';
 import { Project } from '../../services/projectService';
-import { apiService } from '../../services/api';
 import { sowService, ScopeOfWork } from '../../services/sowService';
+import SoWDisplay from '../SoWDisplay';
 import SoWEditor from '../SoWEditor';
 
 interface SoWGenerationTabProps {
@@ -27,74 +25,34 @@ const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({
   isQuestionnaireComplete = false,
   onMoveToBuilderInvitation 
 }) => {
-  const [generating, setGenerating] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [sowId, setSowId] = useState<string | null>(project.sowId || null);
-  const [error, setError] = useState<string>('');
-  const [sow, setSow] = useState<ScopeOfWork | null>(null);
-  const [loadingSow, setLoadingSow] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const [sow, setSow] = useState<ScopeOfWork | null>(null);
+  const [accepting, setAccepting] = useState(false);
 
-  useEffect(() => {
-    if (project.status === 'sow_ready' && sowId) {
-      loadSoW();
-    }
-  }, [project.status, sowId]);
+  const handleSoWGenerated = (generatedSow: ScopeOfWork) => {
+    setSow(generatedSow);
+  };
 
-  const loadSoW = async () => {
-    if (!sowId) return;
+  const handleAcceptSoW = async () => {
     try {
-      setLoadingSow(true);
-      const sowData = await sowService.getSoW(project.id, sowId);
-      setSow(sowData);
+      setAccepting(true);
+      // Call API to accept SoW and update project status
+      await sowService.acceptSoW(project.id, project.sowId || '');
+      
+      // Move to builder invitation tab
+      if (onMoveToBuilderInvitation) {
+        onMoveToBuilderInvitation();
+      }
     } catch (error) {
-      console.error('Failed to load SoW:', error);
-      setError('Failed to load SoW: ' + (error instanceof Error ? error.message : String(error)));
+      console.error('Failed to accept SoW:', error);
+      // Handle error - could show an alert
     } finally {
-      setLoadingSow(false);
+      setAccepting(false);
     }
   };
 
-  const handleGenerateSoW = async () => {
-    try {
-      setGenerating(true);
-      setError('');
-      
-      const response = await apiService.post(`/projects/${project.id}/sow/generate`, {}) as any;
-      setSowId(response.sowId);
-      
-      // Poll for progress
-      const pollInterval = setInterval(async () => {
-        try {
-          const statusResponse = await apiService.get(`/projects/${project.id}/sow/${response.sowId}/status`) as any;
-          setProgress(statusResponse.progress);
-          
-          if (statusResponse.status === 'completed') {
-            clearInterval(pollInterval);
-            setGenerating(false);
-            loadSoW();
-          } else if (statusResponse.status === 'failed') {
-            clearInterval(pollInterval);
-            setGenerating(false);
-            setError('SoW generation failed. Please try again.');
-          }
-        } catch (err) {
-          console.error('Status check failed:', err);
-        }
-      }, 2000);
-      
-      setTimeout(() => {
-        clearInterval(pollInterval);
-        if (generating) {
-          setGenerating(false);
-          setError('Generation timed out. Please try again.');
-        }
-      }, 60 * 1000);
-      
-    } catch (err: any) {
-      setGenerating(false);
-      setError(err.message || 'Failed to start SoW generation');
-    }
+  const handleEditSoW = () => {
+    setEditMode(true);
   };
 
   const handleCompleteSoW = () => {
@@ -104,11 +62,13 @@ const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({
     }
   };
 
-  const canGenerateSoW = isQuestionnaireComplete && !generating;
+  const handleGenerateNew = () => {
+    setSow(null);
+  };
 
   return (
     <Box>
-      <Card>
+      <Card sx={{ mb: 3 }}>
         <CardContent>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
             <DescriptionIcon sx={{ mr: 1, color: 'primary.main' }} />
@@ -123,7 +83,7 @@ const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({
             </Alert>
           ) : project.status === 'sow_ready' ? (
             <Alert severity="success" sx={{ mb: 3 }}>
-              Your Scope of Work is ready!
+              Your Scope of Work is ready! You can now invite builders to quote on your project.
             </Alert>
           ) : (
             <>
@@ -136,82 +96,53 @@ const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({
               </Alert>
             </>
           )}
-
-          {error && (
-            <Alert severity="error" sx={{ mb: 3 }}>
-              {error}
-            </Alert>
-          )}
-
-          {generating && (
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                Generating SoW... {progress}% complete
-              </Typography>
-              <LinearProgress variant="determinate" value={progress} />
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                This process takes approximately 2 minutes
-              </Typography>
-            </Box>
-          )}
-          
-          <Button
-            variant="contained"
-            size="large"
-            onClick={handleGenerateSoW}
-            disabled={!canGenerateSoW || project.status === 'sow_ready'}
-            startIcon={generating ? <CircularProgress size={20} /> : <DescriptionIcon />}
-          >
-            {generating ? 'Generating SoW...' : 
-             project.status === 'sow_ready' ? 'SoW Generated' : 
-             'Generate Scope of Work'}
-          </Button>
         </CardContent>
       </Card>
-      
-      {project.status === 'sow_ready' && sowId && (
-        <Card sx={{ mt: 3 }}>
+
+      {editMode ? (
+        <Card>
           <CardContent>
-            {editMode ? (
-              <SoWEditor
-                projectId={project.id}
-                sowId={sowId}
-                onComplete={handleCompleteSoW}
-              />
-            ) : (
-              <>
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                  <Typography variant="h6">
-                    Generated Scope of Work
-                  </Typography>
+            <SoWEditor
+              projectId={project.id}
+              sowId={project.sowId || ''}
+              onComplete={handleCompleteSoW}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <Box>
+          <SoWDisplay
+            projectId={project.id}
+            sowId={project.sowId}
+            onGenerateNew={handleGenerateNew}
+            onAcceptSoW={project.status !== 'sow_ready' ? handleAcceptSoW : undefined}
+          />
+          
+          {sow && (
+            <Box sx={{ mt: 3, textAlign: 'center' }}>
+              <Grid container spacing={2} justifyContent="center">
+                <Grid item>
                   <Button
-                    variant="contained"
-                    onClick={() => setEditMode(true)}
+                    variant="outlined"
+                    onClick={handleEditSoW}
                     startIcon={<DescriptionIcon />}
                   >
                     Edit SoW
                   </Button>
-                </Box>
-                
-                {loadingSow ? (
-                  <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-                    <CircularProgress />
-                  </Box>
-                ) : sow ? (
-                  <Box>
-                    <Typography variant="body2" component="pre" sx={{ whiteSpace: 'pre-wrap', fontSize: '12px', backgroundColor: '#f5f5f5', p: 2, borderRadius: 1 }}>
-                      {JSON.stringify(sow, null, 2)}
-                    </Typography>
-                  </Box>
-                ) : (
-                  <Typography color="text.secondary">
-                    Failed to load SoW details
-                  </Typography>
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
+                </Grid>
+                <Grid item>
+                  <Button
+                    variant="contained"
+                    onClick={handleCompleteSoW}
+                    disabled={!isQuestionnaireComplete}
+                  >
+                    Continue to Builder Invitation
+                  </Button>
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+        </Box>
       )}
     </Box>
   );

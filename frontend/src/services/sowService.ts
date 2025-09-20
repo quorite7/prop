@@ -35,6 +35,11 @@ class SoWService {
     return apiService.get(`/projects/${projectId}/sow/${sowId}`);
   }
 
+  // Accept SoW and update project status
+  async acceptSoW(projectId: string, sowId: string): Promise<{ success: boolean }> {
+    return apiService.post(`/projects/${projectId}/sow/${sowId}/accept`, {});
+  }
+
   // Format currency for display
   formatCurrency(amount: number): string {
     return new Intl.NumberFormat('en-GB', {

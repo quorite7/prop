@@ -66,3 +66,84 @@ code {
 .hero-card:hover {
   transform: rotate(0deg) scale(1.02);
 }
+/* SoW Generation Progress Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes successBounce {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Enhanced progress bar */
+.MuiLinearProgress-root {
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+.MuiLinearProgress-bar {
+  transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Stage message animations */
+.stage-message {
+  animation: fadeIn 0.5s ease-out;
+}
+
+/* Success state animation */
+.success-bounce {
+  animation: successBounce 0.6s ease-out;
+}
+
+/* Card entrance animation */
+.card-entrance {
+  animation: slideInUp 0.6s ease-out;
+}
+
+/* Enhanced button hover effects */
+.MuiButton-root {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.MuiButton-root:hover {
+  transform: translateY(-1px);
+}
