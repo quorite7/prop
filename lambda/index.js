@@ -84,62 +84,6 @@ async function generateSoWWithBedrock(sowId, project, questionnaireSession) {
                         });
                     }
 
-    // New JSON-focused prompt for reliable parsing
-    const jsonPrompt = `You are an experienced UK home renovations builder. Create a Statement of Work and return ONLY a valid JSON object with this exact structure:
-
-{
-  "title": "Statement of Work - ${project.projectType}",
-  "sections": [
-    {
-      "title": "Executive Summary",
-      "content": "Project overview, objectives, scope summary, timeline, and total value"
-    },
-    {
-      "title": "Detailed Scope of Work", 
-      "content": "Comprehensive breakdown of all work packages including structural, building envelope, internal works, M&E, and finishes"
-    },
-    {
-      "title": "Materials and Specifications",
-      "content": "Material grades, standards (BS/EN), quality requirements, sustainability measures"
-    },
-    {
-      "title": "Programme and Milestones",
-      "content": "Work sequence, milestone dates, critical path, inspection points"
-    },
-    {
-      "title": "Costs and Payment Schedule",
-      "content": "Cost breakdown, payment milestones, variation procedures"
-    },
-    {
-      "title": "Quality Standards and Compliance",
-      "content": "Building Regulations compliance, NHBC Standards, quality control, warranties"
-    },
-    {
-      "title": "Health, Safety and Environmental",
-      "content": "CDM 2015 compliance, risk assessments, environmental protection, waste management"
-    },
-    {
-      "title": "Contract Conditions",
-      "content": "Start/completion dates, insurance, dispute resolution, acceptance criteria"
-    }
-  ],
-  "projectDetails": {
-    "type": "${project.projectType}",
-    "address": "${project.propertyAddress ? Object.values(project.propertyAddress).join(', ') : 'Not specified'}",
-    "requirements": "${project.requirements?.description || 'Not specified'}",
-    "estimatedValue": ${project.requirements?.budget?.max},
-    "duration": "8-12 weeks"
-  }
-}
-
-Project Details:
-- Type: ${project.projectType}
-- Address: ${project.propertyAddress ? Object.values(project.propertyAddress).join(', ') : 'Not specified'}
-- Requirements: ${project.requirements?.description || 'Not specified'}
-- Budget: ${project.requirements?.budget ? `£${project.requirements.budget.min || 0} - £${project.requirements.budget.max || 'Open'}` : 'Not specified'}
-
-IMPORTANT: Return ONLY the JSON object above with detailed professional content in each section. No additional text before or after the JSON.`;
-
 // Old prompt
     const prompt = `You are an experienced UK home renovations builder with 15+ years of experience, preparing a comprehensive Statement of Work (SoW) for a residential construction project.
 You must create a professional, detailed SoW that complies with UK industry standards and best practices.
@@ -148,7 +92,7 @@ You must create a professional, detailed SoW that complies with UK industry stan
 **Fixed Information:**
 - Project Type: ${project.projectType}
 - Property Address: ${project.propertyAddress.line1}, ${project.propertyAddress.city}, ${project.propertyAddress.postcode}
-- Description: ${project.requirements.description}
+- Description/Vision: ${project.requirements.description}
 - Project Documentation: ${documentsContext || 'Not provided'}
 
 **Dynamic Information Gathered:**
@@ -186,74 +130,44 @@ Reference appropriate RIBA stages for this project's scope and current phase.
 - British Standards (BS) relevant to construction materials and methods
 - Local Authority planning and building control requirements
 
-## Required SoW Structure:
-
-### 1. Executive Summary
-- Project overview and key objectives
-- Total contract value and timeline
-- Critical success factors and risks
-
-### 2. Project Description
-- Detailed scope of work with clear boundaries
-- Property details and existing conditions
-- Client requirements and project vision alignment
-
-### 3. Scope of Work (Detailed)
-- **Included Works:** Comprehensive list organized by trade/phase
-- **Excluded Works:** Clear statement of what's not included
-- **Provisional Items:** Items subject to further investigation
-- **Prime Cost Items:** Client-selected items with allowances
-
-### 4. Standards and Compliance
-- Reference to applicable RICS, RIBA, NHBC standards
-- Building Regulations compliance strategy
-- Planning permission conditions adherence
-- Quality standards and British Standards to be applied
-
-### 5. Programme and Methodology
-- Work phases aligned with RIBA stages where applicable
-- Critical path activities and dependencies
-- Methodology referencing NHBC best practices
-- Client decision points and approval stages
-
-### 6. Materials and Specifications
-- Material specifications referencing British Standards
-- Quality grades and performance requirements
-- Supplier/manufacturer requirements
-- Environmental and sustainability considerations
-
-### 7. Health, Safety and Compliance
-- CDM 2015 compliance and responsibilities
-- Risk assessments and method statements
-- Insurance and liability requirements
-- Site safety measures and client obligations
-
-### 8. Quality Assurance
-- Inspection schedules aligned with NHBC standards
-- Hold points and witness points
-- Testing and commissioning requirements
-- Defects liability and warranty periods
-
-### 9. Commercial Terms
-- Payment schedule tied to completion milestones
-- Variations procedure (RICS compliant)
-- Cost control and reporting methods
-- Final account procedures
-
-### 10. Handover and Post-Completion
-- Commissioning and testing procedures
-- Documentation and warranties to be provided
-- RIBA Stage 6 handover requirements
-- Maintenance requirements and guidance
-
-## Professional Requirements:
-- Use appropriate technical terminology and industry standards references
-- Include relevant clause numbers from Building Regulations where applicable
-- Reference specific NHBC Technical Standards sections
-- Align work stages with RIBA Plan of Work 2020
-- Use NRM2 work breakdown structure for detailed items
-- Include risk assessments and mitigation strategies
-- Professional presentation with clear section numbering
+## You MUST respond in following in JSON format:
+{
+  "title": "Statement of Work - ${project.projectType}",
+  "sections": [
+    {
+      "title": "Executive Summary",
+      "content": "Project overview, objectives, scope summary, timeline, and total value"
+    },
+    {
+      "title": "Detailed Scope of Work",
+      "content": "Comprehensive breakdown of all work packages including structural, building envelope, internal works, M&E, and finishes"
+    },
+    {
+      "title": "Materials and Specifications",
+      "content": "Material grades, standards (BS/EN), quality requirements, sustainability measures"
+    },
+    {
+      "title": "Programme and Milestones",
+      "content": "Work sequence, milestone dates, critical path, inspection points"
+    },
+    {
+      "title": "Costs and Payment Schedule",
+      "content": "Cost breakdown, payment milestones, variation procedures"
+    },
+    {
+      "title": "Quality Standards and Compliance",
+      "content": "Building Regulations compliance, NHBC Standards, quality control, warranties"
+    },
+    {
+      "title": "Health, Safety and Environmental",
+      "content": "CDM 2015 compliance, risk assessments, environmental protection, waste management"
+    },
+    {
+      "title": "Contract Conditions",
+      "content": "Start/completion dates, insurance, dispute resolution, acceptance criteria"
+    }
+  ]
+}
 
 ## Output Format:
 Create a comprehensive, professional SoW document that demonstrates industry expertise and compliance with UK construction standards. The document should be suitable for client signature and legally binding contract formation.
@@ -267,8 +181,8 @@ Create a comprehensive, professional SoW document that demonstrates industry exp
         accept: 'application/json',
         body: JSON.stringify({
             anthropic_version: 'bedrock-2023-05-31',
-            max_tokens: 40000,
-            messages: [{ role: 'user', content: jsonPrompt }]
+            max_tokens: 10000,
+            messages: [{ role: 'user', content: prompt }]
         })
     };
 
@@ -282,16 +196,31 @@ Create a comprehensive, professional SoW document that demonstrates industry exp
             ':updatedAt': new Date().toISOString()
         }
     }));
+console.log("DynamoDB updated");
 
     // Call Bedrock
     const response = await bedrockRuntimeClient.send(new InvokeModelCommand(bedrockParams));
+    console.log("response = ", response);
+
     const responseBody = JSON.parse(new TextDecoder().decode(response.body));
     const generatedContent = responseBody.content[0].text;
 
     // Parse and structure the SoW
     let sowData;
     try {
-        sowData = JSON.parse(generatedContent);
+        let cleanedContent = generatedContent;
+        
+        // Handle markdown-wrapped JSON (remove ```json and ``` markers)
+        if (cleanedContent.includes('```json')) {
+            cleanedContent = cleanedContent.replace(/```json\s*/g, '').replace(/```\s*$/g, '');
+        } else if (cleanedContent.startsWith('```')) {
+            cleanedContent = cleanedContent.replace(/^```[a-zA-Z]*\s*/g, '').replace(/```\s*$/g, '');
+        }
+        
+        // Trim whitespace
+        cleanedContent = cleanedContent.trim();
+        
+        sowData = JSON.parse(cleanedContent);
     } catch (e) {
         console.error("Failed to parse Bedrock response as JSON:", e.message);
         console.error("Response content:", generatedContent.substring(0, 500));
@@ -419,6 +348,29 @@ async function logAccess(userId, action, resource, success, details = {}) {
     }
 }
 
+// Builder access control - updated version
+async function hasBuilderAccessNew(builderId, projectId) {
+    try {
+        // Query by projectId and check if the builder has access
+        const result = await dynamodb.send(new QueryCommand({
+            TableName: 'builder-invitations',
+            IndexName: 'ProjectIdIndex',
+            KeyConditionExpression: 'projectId = :projectId',
+            FilterExpression: '(acceptedBy = :builderId OR builderEmail = :builderId) AND #status = :status',
+            ExpressionAttributeNames: { '#status': 'status' },
+            ExpressionAttributeValues: { 
+                ':projectId': projectId, 
+                ':builderId': builderId,
+                ':status': 'accepted'
+            }
+        }));
+        return result.Items && result.Items.length > 0;
+    } catch (error) {
+        console.error('Builder access check error:', error);
+        return false;
+    }
+}
+
 // Builder access control
 async function hasBuilderAccess(builderId, projectId) {
     try {
@@ -426,7 +378,7 @@ async function hasBuilderAccess(builderId, projectId) {
             TableName: 'builder-invitations',
             Key: { projectId, builderId }
         }));
-        return !!result.Item && result.Item.status === 'active';
+        return result.Items && result.Items.length > 0;
     } catch (error) {
         console.error('Builder access check error:', error);
         return false;
@@ -1789,7 +1741,7 @@ exports.handler = async (event) => {
                 if (user.userType === 'homeowner') {
                     hasAccess = await isProjectOwner(user.userId, projectId);
                 } else if (user.userType === 'builder') {
-                    hasAccess = await hasBuilderAccess(user.userId, projectId);
+                    hasAccess = await hasBuilderAccessNew(user.userId, projectId);
                 }
                 
                 if (!hasAccess) {
@@ -2215,8 +2167,16 @@ exports.handler = async (event) => {
                             documentsContext += `\n--- ${doc.fileName} (${doc.fileType}) ---\n${doc.content}\n`;
                         });
                     }
+                    // Format previous responses to include both questions and answers
+                    let previousQA = '';
+                    if (session.responses && session.responses.length > 0) {
+                        previousQA = session.responses.map((resp, index) => {
+                            return `Q${index + 1}: ${resp.questionText || 'Question text not available'}\nA${index + 1}: ${resp.answer || 'No answer provided'}`;
+                        }).join('\n\n');
+                    }
+
                     const prompt = `You are assisting an experienced UK home renovations builder to prepare detailed Statements of Work (SoW) and accurate quotes.
-                    I have already gathered basic project information from the client (provided below).
+                    I have already gathered basic project information from the client (provided below). Remember that the client is a novice and might not have detailed knowledge of building process.
                     Your role is to ask intelligent, project-specific dynamic questions to gather all remaining information needed for accurate SoW and quote preparation.
 Project Details:
 - Type: ${project.projectType}
@@ -2224,10 +2184,13 @@ Project Details:
 - Project Documentation: ${documentsContext || 'Not provided'}
 - Budget: ${project.budget || 'Not specified'}
 - Timeline: ${project.timeline || 'Not specified'}
-- Previous responses: ${JSON.stringify(session.responses || [])}
+
+Previous Questions & Answers:
+${previousQA || 'No previous questions asked yet'}
 
 Your Task:
-Based on the fixed information above, ask ONE targeted question at a time to gather project-specific details. Focus only on information that directly impacts the SoW scope, specifications, and accurate costing for THIS specific project type.
+Based on the fixed information above, ask ONE targeted question at a time to gather project-specific details.
+Focus only on information that directly impacts the SoW scope, specifications, and accurate costing for THIS specific project type.
 
 Professional Approach:
 1. Lead with expertise: Start with the most critical technical question that impacts feasibility or major costs
@@ -2405,7 +2368,9 @@ Begin by asking your first dynamic question. Remember: Maximum 8-10 questions, t
                 const newQuestionIndex = currentSession.currentQuestionIndex + 1;
                 const isComplete = newQuestionIndex >= 8; // AmitD: Temporary stop LLM to 8 questions
                 const response = {
-                    ...requestData,
+                    questionId: requestData.questionId,
+                    questionText: requestData.questionText || requestData.question || 'Question text not provided',
+                    answer: requestData.answer,
                     timestamp: new Date().toISOString()
                 };
 
@@ -2503,11 +2468,11 @@ Begin by asking your first dynamic question. Remember: Maximum 8-10 questions, t
         console.log('Method:', method);
         console.log('SoW Regex Test:', path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/generate$/));
         console.log('Method Match:', method === "POST");
-        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/generate$/) && method === "POST") {
+        if ((path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/generate$/) || path.match(/projects\/([^\/]+)\/sow\/generate$/)) && method === "POST") {
             console.log('=== SOW ENDPOINT MATCHED ===');
             try {
                 const user = await requireAuth(event);
-                const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/generate$/);
+                const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/generate$/) || path.match(/projects\/([^\/]+)\/sow\/generate$/);
                 const projectId = pathMatch[1];
 
                 const projectResult = await dynamodb.send(new GetCommand({
@@ -2566,7 +2531,10 @@ Begin by asking your first dynamic question. Remember: Maximum 8-10 questions, t
 
                 console.log("=== Going to Bedrock now ===");
 
-                setTimeout(() => generateSoWWithBedrock(sowId, projectResult.Item, questionnaireResult.Items[0]), 100);
+                // Start SOW generation asynchronously but don't wait for completion
+                generateSoWWithBedrock(sowId, projectResult.Item, questionnaireResult.Items[0]).catch(error => {
+                    console.error("SOW generation failed:", error);
+                });
 
                 return { statusCode: 200, headers, body: JSON.stringify({ sowId, status: "generating" }) };
             } catch (error) {
@@ -2574,10 +2542,10 @@ Begin by asking your first dynamic question. Remember: Maximum 8-10 questions, t
             }
         }
         // Get SoW Status - GET /projects/{projectId}/sow/{sowId}/status
-        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)\/status$/) && method === "GET") {
+        if ((path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)\/status$/) || path.match(/projects\/([^\/]+)\/sow\/([^\/]+)\/status$/)) && method === "GET") {
             try {
                 const user = await requireAuth(event);
-                const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)\/status$/);
+                const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)\/status$/) || path.match(/projects\/([^\/]+)\/sow\/([^\/]+)\/status$/);
                 const projectId = pathMatch[1];
                 const sowId = pathMatch[2];
 
@@ -2596,10 +2564,10 @@ Begin by asking your first dynamic question. Remember: Maximum 8-10 questions, t
             }
         }
         // Get SoW Document - GET /projects/{projectId}/sow/{sowId}
-        if (path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)$/) && method === "GET") {
+        if ((path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)$/) || path.match(/projects\/([^\/]+)\/sow\/([^\/]+)$/)) && method === "GET") {
             try {
                 const user = await requireAuth(event);
-                const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)$/);
+                const pathMatch = path.match(/^\/(?:prod\/)?projects\/([^\/]+)\/sow\/([^\/]+)$/) || path.match(/projects\/([^\/]+)\/sow\/([^\/]+)$/);
                 const projectId = pathMatch[1];
                 const sowId = pathMatch[2];
 
@@ -2623,7 +2591,26 @@ Begin by asking your first dynamic question. Remember: Maximum 8-10 questions, t
                     return { statusCode: 404, headers, body: JSON.stringify({ error: 'SoW not found' }) };
                 }
 
-                return { statusCode: 200, headers, body: JSON.stringify(sowResult.Item) };
+                // Transform data for frontend
+                const rawSow = sowResult.Item;
+                const costsSection = rawSow.sections?.find(s => s.title === "Costs and Payment Schedule")?.content || "";
+                const programmeSection = rawSow.sections?.find(s => s.title === "Programme and Milestones")?.content || "";
+                let estimatedCost = 0;
+                const costMatch = costsSection.match(/£([\d,]+)/);
+                if (costMatch) estimatedCost = parseFloat(costMatch[1].replace(/,/g, ""));
+                let duration = "To be determined";
+                const durationMatch = programmeSection.match(/(\d+(?:-\d+)?\s*weeks?)/i);
+                if (durationMatch) duration = durationMatch[1];
+                const transformedSow = {
+                    id: rawSow.id, projectId: rawSow.projectId, ownerId: rawSow.ownerId || rawSow.userId,
+                    generatedAt: rawSow.generatedAt, version: rawSow.version || "1.0", title: rawSow.title,
+                    sections: rawSow.sections, projectDetails: rawSow.projectDetails,
+                    scope: { description: rawSow.sections?.find(s => s.title === "Detailed Scope of Work")?.content || rawSow.sections?.find(s => s.title === "Executive Summary")?.content || "Detailed scope information available" },
+                    costs: { total: rawSow.projectDetails?.estimatedValue ? parseFloat(rawSow.projectDetails.estimatedValue.replace(/[£,\-]/g, "").split(" ")[0]) || 0 : estimatedCost },
+                    materials: { total: rawSow.projectDetails?.estimatedValue ? parseFloat(rawSow.projectDetails.estimatedValue.replace(/[£,\-]/g, "").split(" ")[0]) * 0.4 || 0 : estimatedCost * 0.4 },
+                    timeline: { totalDuration: rawSow.projectDetails?.duration || duration }
+                };
+                return { statusCode: 200, headers, body: JSON.stringify(transformedSow) };
             } catch (error) {
                 return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
             }

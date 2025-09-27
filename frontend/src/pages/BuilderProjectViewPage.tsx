@@ -332,57 +332,36 @@ const BuilderProjectViewPage: React.FC = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Scope of Work
+                {sow.title || 'Scope of Work'}
               </Typography>
               
-              {sow.scope && (
-                <Box sx={{ mb: 3 }}>
-                  <Typography variant="subtitle1" gutterBottom>
-                    Project Scope
-                  </Typography>
-                  <Typography variant="body1">
-                    {sow.scope.description || 'Scope details not available'}
-                  </Typography>
-                </Box>
+              {sow.sections && sow.sections.length > 0 ? (
+                sow.sections.map((section: any, index: number) => (
+                  <Box key={index} sx={{ mb: 3 }}>
+                    <Typography variant="subtitle1" gutterBottom color="primary">
+                      {section.title}
+                    </Typography>
+                    <Typography 
+                      variant="body1" 
+                      sx={{ 
+                        whiteSpace: 'pre-line',
+                        lineHeight: 1.7 
+                      }}
+                    >
+                      {section.content}
+                    </Typography>
+                  </Box>
+                ))
+              ) : (
+                <Typography variant="body1">
+                  Scope of Work content is being generated. Please check back shortly.
+                </Typography>
               )}
               
-              {sow.items && sow.items.length > 0 && (
-                <Box sx={{ mb: 3 }}>
-                  <Typography variant="subtitle1" gutterBottom>
-                    Work Items
-                  </Typography>
-                  <TableContainer component={Paper} variant="outlined">
-                    <Table>
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Item</TableCell>
-                          <TableCell>Description</TableCell>
-                          <TableCell align="right">Estimated Cost</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {sow.items.map((item: any, index: number) => (
-                          <TableRow key={index}>
-                            <TableCell>{item.name || `Item ${index + 1}`}</TableCell>
-                            <TableCell>{item.description || 'No description'}</TableCell>
-                            <TableCell align="right">
-                              {item.cost ? formatCurrency(item.cost) : 'TBD'}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </Box>
-              )}
-              
-              {sow.timeline && (
-                <Box sx={{ mb: 3 }}>
-                  <Typography variant="subtitle1" gutterBottom>
-                    Timeline
-                  </Typography>
-                  <Typography variant="body1">
-                    {sow.timeline.totalDuration} days estimated
+              {sow.generatedAt && (
+                <Box sx={{ mt: 3, pt: 2, borderTop: 1, borderColor: 'divider' }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Generated on: {new Date(sow.generatedAt).toLocaleDateString('en-GB')}
                   </Typography>
                 </Box>
               )}

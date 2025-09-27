@@ -3,13 +3,11 @@ import { apiService } from './api';
 export interface ScopeOfWork {
   id: string;
   projectId: string;
-  ownerId: string;
-  scope: any;
-  materials: any;
-  timeline: any;
-  costs: any;
-  permits?: any;
-  standards?: any;
+  title: string;
+  sections: Array<{
+    title: string;
+    content: string;
+  }>;
   generatedAt: string;
   version: string;
 }

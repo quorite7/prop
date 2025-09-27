@@ -37,9 +37,10 @@ interface SoWDisplayProps {
   sowId?: string;
   onGenerateNew?: () => void;
   onAcceptSoW?: () => void;
+  onProjectUpdate?: () => void;
 }
 
-const SoWDisplay: React.FC<SoWDisplayProps> = ({ projectId, sowId, onGenerateNew, onAcceptSoW }) => {
+const SoWDisplay: React.FC<SoWDisplayProps> = ({ projectId, sowId, onGenerateNew, onAcceptSoW, onProjectUpdate }) => {
   const [sow, setSow] = useState<ScopeOfWork | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,6 +64,10 @@ const SoWDisplay: React.FC<SoWDisplayProps> = ({ projectId, sowId, onGenerateNew
     setSow(completedSow);
     setIsGenerating(false);
     setGeneratingSowId(null);
+    // Refresh project data to update status
+    if (onProjectUpdate) {
+      onProjectUpdate();
+    }
   };
 
   const handleGenerationError = (errorMessage: string) => {
@@ -159,7 +164,7 @@ const SoWDisplay: React.FC<SoWDisplayProps> = ({ projectId, sowId, onGenerateNew
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4" gutterBottom>
-          Statement of Work
+          {sow.title}
         </Typography>
         {onGenerateNew && (
           <Button 
@@ -173,75 +178,35 @@ const SoWDisplay: React.FC<SoWDisplayProps> = ({ projectId, sowId, onGenerateNew
       </Box>
       
       <Grid container spacing={3}>
-        <Grid item xs={12} md={8}>
-          <SoWCard>
-            <CardContent>
-              <Typography variant="h6" gutterBottom color="primary">
-                Project Scope
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
-              <Typography variant="body1" sx={{ lineHeight: 1.7 }}>
-                {sow.scope?.description || 'Detailed scope information will be displayed here'}
-              </Typography>
-            </CardContent>
-          </SoWCard>
-        </Grid>
-        
-        <Grid item xs={12} md={4}>
-          <Grid container spacing={2}>
-            <Grid item xs={12}>
-              <SoWCard>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom color="primary">
-                    Total Cost
-                  </Typography>
-                  <CostDisplay variant="h3">
-                    {sowService.formatCurrency(sow.costs?.total || 0)}
-                  </CostDisplay>
-                  <Chip 
-                    label="Estimate" 
-                    size="small" 
-                    color="primary" 
-                    variant="outlined"
-                    sx={{ mt: 1 }}
-                  />
-                </CardContent>
-              </SoWCard>
-            </Grid>
-            
-            <Grid item xs={12}>
-              <SoWCard>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom color="primary">
-                    Materials
-                  </Typography>
-                  <Typography variant="h5" color="text.primary">
-                    {sowService.formatCurrency(sow.materials?.total || 0)}
-                  </Typography>
-                </CardContent>
-              </SoWCard>
-            </Grid>
-          </Grid>
-        </Grid>
-        
-        <Grid item xs={12}>
-          <SoWCard>
-            <CardContent>
-              <Typography variant="h6" gutterBottom color="primary">
-                Project Timeline
-              </Typography>
-              <Divider sx={{ mb: 2 }} />
-              <Typography variant="body1">
-                Estimated Duration: {sow.timeline?.totalDuration || 'To be determined'} days
-              </Typography>
-              {sow.generatedAt && (
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  Generated on {sowService.formatDate(sow.generatedAt)}
+        {sow.sections.map((section, index) => (
+          <Grid item xs={12} key={index}>
+            <SoWCard>
+              <CardContent>
+                <Typography variant="h6" gutterBottom color="primary">
+                  {section.title}
                 </Typography>
-              )}
-            </CardContent>
-          </SoWCard>
-        </Grid>
+                <Divider sx={{ mb: 2 }} />
+                <Typography 
+                  variant="body1" 
+                  sx={{ 
+                    lineHeight: 1.7,
+                    whiteSpace: 'pre-line'
+                  }}
+                >
+                  {section.content}
+                </Typography>
+              </CardContent>
+            </SoWCard>
+          </Grid>
+        ))}
+
+        {sow.generatedAt && (
+          <Grid item xs={12}>
+            <Typography variant="body2" color="text.secondary" textAlign="center">
+              Generated on {sowService.formatDate(sow.generatedAt)}
+            </Typography>
+          </Grid>
+        )}
 
         {onAcceptSoW && (
           <Grid item xs={12}>

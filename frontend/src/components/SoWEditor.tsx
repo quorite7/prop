@@ -75,50 +75,16 @@ const SoWEditor: React.FC<SoWEditorProps> = ({ projectId, sowId, onComplete }) =
   const convertSoWToItems = (sow: ScopeOfWork): SoWItem[] => {
     const items: SoWItem[] = [];
     
-    // Convert scope
-    if (sow.scope) {
+    // Convert sections to items
+    sow.sections.forEach((section, index) => {
       items.push({
-        id: 'scope-1',
+        id: `section-${index}`,
         type: 'scope',
-        title: 'Project Scope',
-        description: sow.scope.description || 'Project scope description',
+        title: section.title,
+        description: section.content,
         editable: true
       });
-    }
-
-    // Convert materials
-    if (sow.materials) {
-      Object.entries(sow.materials).forEach(([key, value], index) => {
-        if (key !== 'total' && value && typeof value === 'object') {
-          items.push({
-            id: `material-${index}`,
-            type: 'material',
-            title: key.charAt(0).toUpperCase() + key.slice(1),
-            description: (value as any).description || `${key} materials`,
-            quantity: (value as any).quantity || 1,
-            unit: (value as any).unit || 'item',
-            cost: (value as any).cost || 0,
-            editable: true
-          });
-        }
-      });
-    }
-
-    // Convert timeline
-    if (sow.timeline) {
-      Object.entries(sow.timeline).forEach(([key, value], index) => {
-        if (key !== 'totalDuration' && value && typeof value === 'object') {
-          items.push({
-            id: `timeline-${index}`,
-            type: 'timeline',
-            title: key.charAt(0).toUpperCase() + key.slice(1),
-            description: (value as any).description || `${key} phase`,
-            duration: (value as any).duration || 1,
-            editable: true
-          });
-        }
-      });
-    }
+    });
 
     return items;
   };

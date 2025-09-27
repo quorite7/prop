@@ -233,6 +233,17 @@ const ProjectDashboardPage: React.FC = () => {
     }
   };
 
+  const refreshProject = async () => {
+    if (projectId) {
+      try {
+        const projectData = await projectService.getProject(projectId);
+        setProject(projectData);
+      } catch (error) {
+        console.error('Error refreshing project:', error);
+      }
+    }
+  };
+
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
   };
@@ -248,6 +259,7 @@ const ProjectDashboardPage: React.FC = () => {
           project={project} 
           isQuestionnaireComplete={isQuestionnaireComplete}
           onMoveToBuilderInvitation={() => setActiveTab(3)}
+          onProjectUpdate={refreshProject}
         />;
       case 3:
         return <BuilderInvitationTab project={project} />;

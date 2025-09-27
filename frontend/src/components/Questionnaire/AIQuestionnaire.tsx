@@ -94,8 +94,12 @@ const AIQuestionnaire: React.FC<AIQuestionnaireProps> = ({ project, onComplete }
       
       const response = {
         questionId: currentQuestion.question.id,
+        questionText: currentQuestion.question.text,
         answer: currentAnswer
       };
+
+//      console.log('Submitting response:', response);
+//      console.log('Current question object:', currentQuestion);
       
       const updatedSession = await questionnaireService.submitResponse(
         project.id, 

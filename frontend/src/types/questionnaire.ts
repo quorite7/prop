@@ -11,6 +11,7 @@ export interface QuestionnaireQuestion {
 
 export interface QuestionnaireResponse {
   questionId: string;
+  questionText?: string; // Optional for backward compatibility
   answer: string | number | boolean;
   timestamp: string;
 }

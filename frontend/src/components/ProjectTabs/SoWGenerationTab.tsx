@@ -18,12 +18,14 @@ interface SoWGenerationTabProps {
   project: Project;
   isQuestionnaireComplete?: boolean;
   onMoveToBuilderInvitation?: () => void;
+  onProjectUpdate?: () => void;
 }
 
 const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({ 
   project, 
   isQuestionnaireComplete = false,
-  onMoveToBuilderInvitation 
+  onMoveToBuilderInvitation,
+  onProjectUpdate
 }) => {
   const [editMode, setEditMode] = useState(false);
   const [sow, setSow] = useState<ScopeOfWork | null>(null);
@@ -116,6 +118,7 @@ const SoWGenerationTab: React.FC<SoWGenerationTabProps> = ({
             sowId={project.sowId}
             onGenerateNew={handleGenerateNew}
             onAcceptSoW={project.status !== 'sow_ready' ? handleAcceptSoW : undefined}
+            onProjectUpdate={onProjectUpdate}
           />
           
           {sow && (

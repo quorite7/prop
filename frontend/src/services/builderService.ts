@@ -226,7 +226,7 @@ class BuilderService {
   }
 
   async getSoWDetails(sowId: string): Promise<SoWDetails> {
-    return apiService.get<SoWDetails>(`/builder/sow/${sowId}`);
+    throw new Error('Builder SoW viewing should use the updated SoWReviewPage with projectId/sowId routing');
   }
 
   // Quote Management

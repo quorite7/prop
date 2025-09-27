@@ -61,6 +61,7 @@ const QuestionnaireReview: React.FC<QuestionnaireReviewProps> = ({
         editingResponse.questionId,
         {
           questionId: editingResponse.questionId,
+          questionText: editingResponse.questionText || 'Question text not available',
           answer: editValue
         }
       );
