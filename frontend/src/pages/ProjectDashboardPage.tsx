@@ -158,10 +158,10 @@ const ProjectDashboardPage: React.FC = () => {
                 <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                   <CardContent sx={{ flexGrow: 1 }}>
                     <Typography variant="h6" gutterBottom>
-                      {proj.requirements?.description || 'Untitled Project'}
+                      {formatProjectType(proj.projectType)} - {proj.propertyAddress?.line1}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" gutterBottom>
-                      {formatProjectType(proj.projectType)}
+                      {proj.requirements?.description || 'Untitled Project'}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                       {formatAddress(proj.propertyAddress)}

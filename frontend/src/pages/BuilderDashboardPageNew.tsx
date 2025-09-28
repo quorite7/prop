@@ -222,7 +222,7 @@ const BuilderDashboardPageNew: React.FC = () => {
                   <CardContent sx={{ flexGrow: 1 }}>
                     <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
                       <Typography variant="h6" component="h3">
-                        {project.requirements?.description || 'Home Improvement Project'}
+                        {project.projectType?.replace('_', ' ').toUpperCase() || 'General'} - {project.propertyAddress?.line1}
                       </Typography>
                       <Chip 
                         label={project.status?.replace('_', ' ').toUpperCase() || 'ACTIVE'} 
@@ -232,7 +232,7 @@ const BuilderDashboardPageNew: React.FC = () => {
                     </Box>
                     
                     <Typography variant="body2" color="text.secondary" gutterBottom>
-                      {project.projectType?.replace('_', ' ').toUpperCase() || 'General'}
+                      {project.requirements?.description || 'Home Improvement Project'}
                     </Typography>
                     
                     <Typography variant="body2" gutterBottom>
