@@ -84,8 +84,95 @@ async function generateSoWWithBedrock(sowId, project, questionnaireSession) {
                         });
                     }
 
+    const prompt = `You are an experienced UK construction professional creating a comprehensive Statement of Work that defines exactly what work is required to complete the project. This SoW is for builders to understand the full scope - they will provide their own pricing.
+
+    ## Project Information:
+    - Project Type: ${project.projectType}
+    - Property Address: ${project.propertyAddress.line1}, ${project.propertyAddress.city}, ${project.propertyAddress.postcode}
+    - Description/Project Vision: ${project.requirements.description}
+    - Project Documentation: ${documentsContext || 'Not provided'}
+    - Questionnaire Responses: ${JSON.stringify(questionnaireSession.responses)}
+
+## UK Best Practices & Building Regulations Framework:
+All work must comply with UK standards. Reference these frameworks when defining work requirements:
+
+### **Building Regulations 2010 (Work Requirements):**
+- **Part A (Structure)**: What structural work/calculations are required
+- **Part B (Fire Safety)**: What fire safety measures must be installed
+- **Part F (Ventilation)**: What ventilation systems are required
+- **Part L (Thermal Performance)**: What insulation/thermal performance work needed
+- **Part P (Electrical)**: What electrical work and certifications required
+- **Part K (Stairs)**: What staircase work must meet these requirements
+- **Part M (Access)**: What accessibility features are required
+
+### **NHBC Standards (Quality Requirements):**
+- What work must meet NHBC standards for warranty compliance
+- Specific construction methods required
+
+### **British Standards (Technical Work Requirements):**
+- What materials and installation methods must meet BS/EN standards
+- Technical specifications for materials and workmanship
+
+## Statement of Work Structure:
+
+### **WORK PACKAGES** (What work must be completed)
+- Detailed description of each work category
+- Specific tasks and deliverables required
+- Technical requirements and performance standards
+- Professional services required (structural engineer, certifications)
+
+### **MATERIALS & TECHNICAL SPECIFICATIONS** (What must be supplied/installed)
+- Material types and technical specifications required
+- Performance standards that must be achieved
+- Quality standards and compliance requirements
+- Installation methods and technical details
+
+### **REGULATORY COMPLIANCE WORK** (What compliance work is required)
+- Building control application and inspection requirements
+- Required certifications and testing work
+- Professional services that must be procured
+- Documentation and certificates that must be provided
+
+### **PROGRAMME & SEQUENCING** (How work must be sequenced)
+- Work sequence requirements
+- Dependencies between work packages
+- Inspection and certification points in programme
+- Access and timing constraints
+
+## You MUST respond in following JSON format:
+{
+  "title": "Statement of Work - ${project.projectType}",
+  "sections": [
+    {
+      "title": "Project Summary",
+      "content": "Brief project overview, key objectives, and scope boundaries"
+    },
+    {
+      "title": "Detailed Scope of Work", 
+      "content": "Comprehensive breakdown of all work packages - what exactly needs to be built/installed/completed"
+    },
+    {
+      "title": "Materials and Specifications",
+      "content": "Specific material requirements, grades, British Standards, and performance specifications"
+    },
+    {
+      "title": "Building Regulations and Compliance", 
+      "content": "Which Building Regulations parts apply, what compliance work is required, certifications needed"
+    },
+    {
+      "title": "Programme and Access",
+      "content": "Work sequence requirements, access constraints, working hour limitations, key dependencies"
+    }
+  ]
+}
+
+## Output Format:
+Create a focused SoW that gives builders exactly what they need to quote accurately. No legal terms, insurance details, or contract conditions - just clear definition of the work required.
+
+**Begin creating the Statement of Work using the project information provided above.**
+    `;
 // Old prompt
-    const prompt = `You are an experienced UK home renovations builder with 15+ years of experience, preparing a comprehensive Statement of Work (SoW) for a residential construction project.
+    const old_prompt = `You are an experienced UK home renovations builder with 15+ years of experience, preparing a comprehensive Statement of Work (SoW) for a residential construction project.
 You must create a professional, detailed SoW that complies with UK industry standards and best practices.
 
 ## Project Information to Include:
