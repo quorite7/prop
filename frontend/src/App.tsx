@@ -15,7 +15,6 @@ import RegisterPage from './pages/RegisterPage';
 import ConfirmRegistrationPage from './pages/ConfirmRegistrationPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
-import BuilderDashboardPage from './pages/BuilderDashboardPage';
 import BuilderDashboardPageNew from './pages/BuilderDashboardPageNew';
 import BuilderProjectViewPage from './pages/BuilderProjectViewPage';
 import ProfilePage from './pages/ProfilePage';
