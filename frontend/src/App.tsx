@@ -4,8 +4,6 @@ import { Box } from '@mui/material';
 import { AuthProvider } from './contexts/AuthContext';
 import { AIAssistantProvider } from './contexts/AIAssistantContext';
 import Layout from './components/Layout/Layout';
-import LandingPage from './pages/LandingPage';
-import ProjectTypesShowcasePage from './pages/ProjectTypesShowcasePage';
 import HomePage from './pages/HomePage';
 import OnboardingPage from './pages/OnboardingPage';
 import ProjectCreationPage from './pages/ProjectCreationPage';
@@ -40,9 +38,9 @@ function App() {
           </a>
           
           <Routes>
-            {/* Public landing page */}
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/projects/types" element={<ProjectTypesShowcasePage />} />
+            {/* Redirect root to app */}
+            <Route path="/" element={<Navigate to="/app" replace />} />
+            <Route path="/projects/types" element={<Navigate to="/app" replace />} />
             
             {/* Authentication routes (no layout) */}
             <Route path="/login" element={<LoginPage />} />
