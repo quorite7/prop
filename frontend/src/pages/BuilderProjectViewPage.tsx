@@ -160,7 +160,7 @@ const BuilderProjectViewPage: React.FC = () => {
     );
   }
 
-  if (error || !project) {
+  if (error || (!project && !loading)) {
     return (
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Alert severity="error" sx={{ mb: 3 }}>

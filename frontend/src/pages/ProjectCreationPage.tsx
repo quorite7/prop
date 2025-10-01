@@ -41,6 +41,8 @@ interface ProjectFormData {
     city: string;
     postcode: string;
     country: string;
+    buildYear?: string;
+    propertyType?: string;
   };
   projectType: string;
   requirements: {
@@ -154,7 +156,8 @@ const ProjectCreationPage: React.FC = () => {
       case 0: // Address
         return !!(formData.propertyAddress.line1 && 
                  formData.propertyAddress.city && 
-                 formData.propertyAddress.postcode);
+                 formData.propertyAddress.postcode &&
+                 formData.propertyAddress.propertyType);
       case 1: // Project Type
         return !!formData.projectType;
       case 2: // Project Vision
