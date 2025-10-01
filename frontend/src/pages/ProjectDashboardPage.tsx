@@ -57,6 +57,7 @@ const ProjectDashboardPage: React.FC = () => {
           // Load specific project
           const projectData = await projectService.getProject(projectId);
           setProject(projectData);
+          setLoading(false);
 
           // Check questionnaire completion status
           const questionnaireSession = await questionnaireService.getQuestionnaireSession(projectId);
@@ -72,10 +73,10 @@ const ProjectDashboardPage: React.FC = () => {
           // Load all user projects for dashboard view
           const userProjects = await projectService.getUserProjects();
           setProjects(userProjects);
+          setLoading(false);
         }
       } catch (err: any) {
         setError(err.response?.data?.error?.message || 'Failed to load data');
-      } finally {
         setLoading(false);
       }
     };
@@ -200,12 +201,12 @@ const ProjectDashboardPage: React.FC = () => {
     );
   }
 
-  // Single project view
-  if (!project) {
+  // Single project view - only show "not found" if loading is complete and no error
+  if (projectId && !loading && !error && !project) {
     return (
       <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Alert severity="error">
-          Project not found
+        <Alert severity="info">
+          Looking for project details...
         </Alert>
         <Button onClick={() => navigate('/app/dashboard')} sx={{ mt: 2 }}>
           Back to Dashboard
@@ -249,6 +250,7 @@ const ProjectDashboardPage: React.FC = () => {
   };
 
   const renderTabContent = () => {
+    if (!project) return null;
     switch (activeTab) {
       case 0:
         return <ProjectOverviewTab project={project} />;
@@ -267,6 +269,11 @@ const ProjectDashboardPage: React.FC = () => {
         return <ProjectOverviewTab project={project} />;
     }
   };
+
+  // Don't render project details if project is null (still loading or not found)
+  if (!project) {
+    return null;
+  }
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>

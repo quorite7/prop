@@ -20,6 +20,8 @@ interface Address {
   city: string;
   postcode: string;
   country: string;
+  buildYear?: string;
+  propertyType?: string;
 }
 
 interface AddressStepProps {
@@ -52,7 +54,9 @@ const AddressStep: React.FC<AddressStepProps> = ({
     line2: '',
     city: '',
     postcode: '',
-    country: 'UK'
+    country: 'UK',
+    buildYear: '',
+    propertyType: ''
   };
 
   useEffect(() => {
@@ -198,7 +202,43 @@ const AddressStep: React.FC<AddressStepProps> = ({
         </Grid>
       </Grid>
 
-      {/* Address Suggestions */}
+      {/* Property Details */}
+      <Grid container spacing={3} sx={{ mt: 2 }}>
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth
+            label="When was the house built?"
+            placeholder="e.g., 1960, 1980-1990, Victorian era"
+            value={currentData.buildYear || ''}
+            onChange={(e) => handleFieldChange('buildYear', e.target.value)}
+            helperText="Year, range, or era (affects construction type)"
+          />
+        </Grid>
+
+        <Grid item xs={12} sm={6}>
+          <TextField
+            fullWidth
+            select
+            required
+            label="Property Type"
+            value={currentData.propertyType || ''}
+            onChange={(e) => handleFieldChange('propertyType', e.target.value)}
+            SelectProps={{ native: true }}
+            helperText="Type of property"
+          >
+            <option value="">Property Type</option>
+            <option value="detached">Detached House</option>
+            <option value="semi-detached">Semi-Detached House</option>
+            <option value="mid-terraced">Mid-Terraced House</option>
+            <option value="end-terraced">End-Terraced House</option>
+            <option value="bungalow">Bungalow</option>
+            <option value="flat">Flat/Apartment</option>
+            <option value="maisonette">Maisonette</option>
+            <option value="cottage">Cottage</option>
+            <option value="townhouse">Townhouse</option>
+          </TextField>
+        </Grid>
+      </Grid>      {/* Address Suggestions */}
       {validationResult?.suggestions && validationResult.suggestions.length > 0 && (
         <Box sx={{ mt: 3 }}>
           <Typography variant="h6" gutterBottom>
