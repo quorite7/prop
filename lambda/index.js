@@ -84,11 +84,13 @@ async function generateSoWWithBedrock(sowId, project, questionnaireSession) {
                         });
                     }
 
-    const prompt = `You are an experienced UK construction professional creating a comprehensive Statement of Work that defines exactly what work is required to complete the project. This SoW is for builders to understand the full scope - they will provide their own pricing.
+    const sow_prompt = `You are an experienced UK construction professional creating a comprehensive Statement of Work that defines exactly what work is required to complete the project. This SoW is for builders to understand the full scope - they will provide their own pricing.
 
     ## Project Information:
     - Project Type: ${project.projectType}
     - Property Address: ${project.propertyAddress.line1}, ${project.propertyAddress.city}, ${project.propertyAddress.postcode}
+    - Property Type: ${project.propertyAddress.propertyType || 'Not specified'}
+    - House Built: ${project.propertyAddress.buildYear || 'Not specified'}
     - Description/Project Vision: ${project.requirements.description}
     - Project Documentation: ${documentsContext || 'Not provided'}
     - Questionnaire Responses: ${JSON.stringify(questionnaireSession.responses)}
@@ -172,7 +174,7 @@ Create a focused SoW that gives builders exactly what they need to quote accurat
 **Begin creating the Statement of Work using the project information provided above.**
     `;
 // Old prompt
-    const old_prompt = `You are an experienced UK home renovations builder with 15+ years of experience, preparing a comprehensive Statement of Work (SoW) for a residential construction project.
+    const old_sow_prompt = `You are an experienced UK home renovations builder with 15+ years of experience, preparing a comprehensive Statement of Work (SoW) for a residential construction project.
 You must create a professional, detailed SoW that complies with UK industry standards and best practices.
 
 ## Project Information to Include:
@@ -269,7 +271,10 @@ Create a comprehensive, professional SoW document that demonstrates industry exp
         body: JSON.stringify({
             anthropic_version: 'bedrock-2023-05-31',
             max_tokens: 10000,
-            messages: [{ role: 'user', content: prompt }]
+            temperature: 0.7,    // ← Higher: Quality prose
+            top_p: 0.9,          // ← Higher: Professional variety
+            top_k: 100,          // ← Higher: Rich vocabulary
+            messages: [{ role: 'user', content: sow_prompt }]
         })
     };
 
@@ -2262,18 +2267,20 @@ exports.handler = async (event) => {
                         }).join('\n\n');
                     }
 
-                    const prompt = `You are assisting an experienced UK home renovations builder to prepare detailed Statements of Work (SoW) and accurate quotes.
+                    const question_answer_prompt = `You are assisting an experienced UK home renovations builder to prepare detailed Statements of Work (SoW) and accurate quotes.
                     I have already gathered basic project information from the client (provided below). Remember that the client is a novice and might not have detailed knowledge of building process.
                     Your role is to ask intelligent, project-specific dynamic questions to gather all remaining information needed for accurate SoW and quote preparation.
 Project Details:
 - Type: ${project.projectType}
+- Property Type: ${project.propertyAddress?.propertyType || 'Not specified'}
+- House Built: ${project.propertyAddress?.buildYear || 'Not specified'}
 - Description/Vision: ${project.requirements?.description || 'Not specified'}
 - Project Documentation: ${documentsContext || 'Not provided'}
 - Budget: ${project.budget || 'Not specified'}
 - Timeline: ${project.timeline || 'Not specified'}
 
 Previous Questions & Answers:
-${previousQA || 'No previous questions asked yet'}
+${previousQA || 'None'}
 
 Your Task:
 Based on the fixed information above, ask ONE targeted question at a time to gather project-specific details.
@@ -2295,7 +2302,7 @@ Response Format: You are allowed to respond ONLY in a JSON object using this exa
     "options": ["option1", "option2"] (only for multiple_choice),
     "required": true|false
   },
-  "reasoning": "Brief explanation of why this question is important"
+  "reasoning": "1 short sentence of why this question is important"
 }
 Question Types:
 "text": For open-ended responses requiring detailed answers
@@ -2335,15 +2342,18 @@ Begin by asking your first dynamic question. Remember: Maximum 8-10 questions, t
 `;
                     console.log('Attempting Bedrock AI generation...');
                     console.log('=== BEDROCK PROMPT ===');
-                    console.log('Prompt:', prompt);
+                    console.log('Prompt:', question_answer_prompt);
                     const command = new InvokeModelCommand({
                         modelId: 'eu.anthropic.claude-sonnet-4-20250514-v1:0',
                         body: JSON.stringify({
                             anthropic_version: 'bedrock-2023-05-31',
                             max_tokens: 1000,
+                            temperature: 0.3,    // ← Low: Focus on most important
+                            top_p: 0.85,         // ← Moderate: Clear questions
+                            top_k: 40,           // ← Moderate: Stay on topic
                             messages: [{
                                 role: 'user',
-                                content: prompt
+                                content: question_answer_prompt
                             }]
                         }),
                         contentType: 'application/json',
